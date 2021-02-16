@@ -145,6 +145,8 @@ manifest:
       repo-path: mcuboot
       path: modules/tee/tfm-mcuboot
       revision: 1.7.0-rc1
+    - name: tensorflow
+      path: modules/tensorflow
 
   self:
     path: zephyr

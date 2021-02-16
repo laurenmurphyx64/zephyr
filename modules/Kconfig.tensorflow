@@ -1,0 +1,4 @@
+menuconfig TENSORFLOW
+		bool "TensorFlow Lite Micro Support"
+		help
+		  This option enables the TensorFlow Lite Micro library.

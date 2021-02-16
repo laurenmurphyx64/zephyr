@@ -34,6 +34,7 @@ source "modules/Kconfig.tinycrypt"
 source "modules/Kconfig.vega"
 source "modules/Kconfig.xtensa"
 source "modules/Kconfig.mcuboot_bootutil"
+source "modules/Kconfig.tensorflow"
 
 comment "Unavailable modules, please install those via the project manifest."
 
