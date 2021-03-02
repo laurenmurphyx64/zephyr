@@ -135,6 +135,14 @@ void coop_thread_entry(void)
 
 int main(void)
 {
+	try {
+		throw 42;
+	}
+	catch (int i) {
+		printk("No failure!");
+		return 0;
+	}
+
 	struct k_timer timer;
 
 	k_thread_create(&coop_thread, coop_stack, STACKSIZE,
