@@ -21,6 +21,8 @@ manifest:
   remotes:
     - name: upstream
       url-base: https://github.com/zephyrproject-rtos
+    - name: rfc
+      url-base: https://github.com/laurenmurphyx64
 
   #
   # Please add items below based on alphabetical order
@@ -145,6 +147,11 @@ manifest:
       repo-path: mcuboot
       path: modules/tee/tfm-mcuboot
       revision: v1.7.2
+    - name: tensorflow
+      repo-path: tensorflow
+      path: modules/lib/tensorflow
+      revision: 203ede03c06a27de671fc85c7bda9ee2806cd8c0
+      remote: rfc
 
   self:
     path: zephyr
