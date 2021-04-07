@@ -24,6 +24,19 @@ from an accelerometer.
 Building and Running
 ********************
 
+This sample should work on boards that have either the FXOS8700 or
+the ADXL345 accelerometer.
+
+This application can be built and executed on the :ref:`frdm_k64f`
+as follows:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/tensorflow/magic_wand
+   :host-os: unix
+   :board: frdm_k64f
+   :goals: build flash
+   :compact:
+
 The application can be built for the :ref:`litex-vexriscv` for
 emulation in Renode as follows:
 
@@ -51,13 +64,21 @@ start the emulator:
 Sample Output
 =============
 
-The Renode-emulated LiteX/VexRiscv board is fed data that the
-application recognizes as a series of alternating ring and slope
-gestures.
+Align the accelerometer at rest and then make one of the recognizable
+gestures (wing, ring or slope) and you should observe one of the
+following:
 
 .. code-block:: console
 
-    Got accelerometer, label: accel-0
+    Got accelerometer, label: FXOS8700
+
+    WING:
+    *         *         *
+     *       * *       *
+      *     *   *     *
+       *   *     *   *
+        * *       * *
+         *         *
 
     RING:
               *
@@ -69,33 +90,17 @@ gestures.
               *
 
     SLOPE:
+             *
             *
            *
           *
          *
         *
        *
-      *
-     * * * * * * * *
+      * * * * * * * *
 
-    RING:
-              *
-           *     *
-         *         *
-        *           *
-         *         *
-           *     *
-              *
-
-    SLOPE:
-            *
-           *
-          *
-         *
-        *
-       *
-      *
-     * * * * * * * *
+The Renode-emulated board is fed data that the application
+recognizes as a series of alternating ring and slope gestures.
 
 Modifying Sample for Your Own Project
 *************************************

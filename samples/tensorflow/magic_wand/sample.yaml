@@ -3,6 +3,6 @@ sample:
   name: magic wand tensorflow
 tests:
   sample.tensorflow.magicwand:
-    platform_allow: litex_vexriscv
+    platform_allow: litex_vexriscv frdm_k64f
     build_only: true
     tags: tensorflow
