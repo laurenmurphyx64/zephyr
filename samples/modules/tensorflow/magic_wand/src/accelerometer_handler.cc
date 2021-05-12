@@ -36,7 +36,15 @@ bool initial = true;
 
 TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 {
+	#if defined(CONFIG_LSM6DSL)
+	label = DT_LABEL(DT_INST(0, st_lsm6dsl));
+	#elif defined(CONFIG_ADXL345)
 	label = DT_LABEL(DT_INST(0, adi_adxl345));
+	#else
+	TF_LITE_REPORT_ERROR(error_reporter,
+					"Unsupported accelerometer\n");
+	#endif
+
 	sensor = device_get_binding(label);
 	if (sensor == NULL) {
 		TF_LITE_REPORT_ERROR(error_reporter,
@@ -76,6 +84,13 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 		bufx[begin_index] = (float)sensor_value_to_double(&accel[0]);
 		bufy[begin_index] = (float)sensor_value_to_double(&accel[1]);
 		bufz[begin_index] = (float)sensor_value_to_double(&accel[2]);
+		
+		// TODO: REMOVE
+		// printf("AX=%10.6f AY=%10.6f AZ=%10.6f \n",
+		//        bufx[begin_index],
+		//        bufy[begin_index],
+		//        bufz[begin_index]);
+		
 		begin_index++;
 		if (begin_index >= BUFLEN) {
 			begin_index = 0;
