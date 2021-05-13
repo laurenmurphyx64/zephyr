@@ -34,18 +34,23 @@ float bufz[BUFLEN] = { 0.0f };
 
 bool initial = true;
 
+static inline float convert(struct sensor_value *val)
+{
+	return (val->val1 + (float)val->val2 / 1000000);
+}
+
 TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 {
-	#if defined(CONFIG_LSM6DSL)
-	label = DT_LABEL(DT_INST(0, st_lsm6dsl));
-	#elif defined(CONFIG_ADXL345)
+	#if defined(CONFIG_ADXL345)
 	label = DT_LABEL(DT_INST(0, adi_adxl345));
+	#elif defined(CONFIG_LSM6DSL)
+	label = DT_LABEL(DT_INST(0, st_lsm6dsl));
 	#else
 	TF_LITE_REPORT_ERROR(error_reporter,
 					"Unsupported accelerometer\n");
 	#endif
 
-	sensor = device_get_binding(label);
+	sensor = device_get_binding(label); // TODO: Change
 	if (sensor == NULL) {
 		TF_LITE_REPORT_ERROR(error_reporter,
 				     "Failed to get accelerometer, label: %s\n",
@@ -69,27 +74,41 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 		TF_LITE_REPORT_ERROR(error_reporter, "Fetch failed\n");
 		return false;
 	}
+	/* ADXL345 uses return value of sensor_sample_fetch as sample count */
+	#if defined(CONFIG_ADXL345)
 	/* Skip if there is no data */
 	if (!rc) {
 		return false;
 	}
-
 	samples_count = rc;
+	#else
+	samples_count = 1;
+	#endif
+
 	for (int i = 0; i < samples_count; i++) {
 		rc = sensor_channel_get(sensor, SENSOR_CHAN_ACCEL_XYZ, accel);
 		if (rc < 0) {
 			TF_LITE_REPORT_ERROR(error_reporter, "ERROR: Update failed: %d\n", rc);
 			return false;
 		}
+
+		#if defined(CONFIG_ADXL345)
 		bufx[begin_index] = (float)sensor_value_to_double(&accel[0]);
 		bufy[begin_index] = (float)sensor_value_to_double(&accel[1]);
 		bufz[begin_index] = (float)sensor_value_to_double(&accel[2]);
-		
+		#else
+		// bufx[begin_index] = convert(&accel[0]);
+		// bufy[begin_index] = convert(&accel[1]);
+		// bufz[begin_index] = convert(&accel[2]);
+		bufx[begin_index] = (float)(sensor_value_to_double(&accel[0]) * 1000);
+		bufy[begin_index] = (float)(sensor_value_to_double(&accel[1]) * 1000);
+		bufz[begin_index] = (float)(sensor_value_to_double(&accel[2]) * 1000);
+		#endif
 		// TODO: REMOVE
-		// printf("AX=%10.6f AY=%10.6f AZ=%10.6f \n",
-		//        bufx[begin_index],
-		//        bufy[begin_index],
-		//        bufz[begin_index]);
+		printf("AX=%10.6f AY=%10.6f AZ=%10.6f \n",
+		       bufx[begin_index],
+		       bufy[begin_index],
+		       bufz[begin_index]);
 		
 		begin_index++;
 		if (begin_index >= BUFLEN) {
