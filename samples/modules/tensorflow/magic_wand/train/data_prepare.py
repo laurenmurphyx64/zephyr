@@ -38,8 +38,7 @@ LABEL_NAME = "gesture"
 DATA_NAME = "accel_ms2_xyz"
 folders = ["wing", "ring", "slope"]
 names = [
-        "hyw", "shiyun", "tangsy", "dengyl", "zhangxy", "pengxl", "liucx",
-        "jiangyh", "xunkai"
+        "lauren"
 ]
 
 

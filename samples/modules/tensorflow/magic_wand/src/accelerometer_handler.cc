@@ -22,6 +22,7 @@
 #include <string.h>
 #include <zephyr.h>
 
+#define MS2_IN_G 9.80665
 #define BUFLEN 300
 int begin_index = 0;
 const char *label = NULL;
@@ -34,23 +35,49 @@ float bufz[BUFLEN] = { 0.0f };
 
 bool initial = true;
 
-static inline float convert(struct sensor_value *val)
+static struct sensor_value accel_x_out, accel_y_out, accel_z_out;
+/* Set sampling rate to 140 Hz */
+const struct sensor_value odr_attr = {
+	.val1 = 104,
+	.val2 = 0
+};
+
+#ifdef CONFIG_LSM6DSL_TRIGGER
+static void lsm6dsl_trigger_handler(const struct device *dev,
+				    struct sensor_trigger *trig)
 {
-	return (val->val1 + (float)val->val2 / 1000000);
+	static struct sensor_value accel_x, accel_y, accel_z;
+
+	sensor_sample_fetch_chan(dev, SENSOR_CHAN_ACCEL_XYZ);
+	sensor_channel_get(dev, SENSOR_CHAN_ACCEL_X, &accel_x);
+	sensor_channel_get(dev, SENSOR_CHAN_ACCEL_Y, &accel_y);
+	sensor_channel_get(dev, SENSOR_CHAN_ACCEL_Z, &accel_z);
+
+	accel_x_out = accel_x;
+	accel_y_out = accel_y;
+	accel_z_out = accel_z;
+}
+#endif
+
+static inline float convert_ms2_to_mg(struct sensor_value *val)
+{
+	return (((val->val1 + (float)val->val2 / 1000000) / MS2_IN_G) * 1000);
 }
 
 TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 {
-	#if defined(CONFIG_ADXL345)
+	k_sleep(K_MSEC(1000)); /* Allow the board time to set up accelerometer */
+
+#if defined(CONFIG_ADXL345)
 	label = DT_LABEL(DT_INST(0, adi_adxl345));
-	#elif defined(CONFIG_LSM6DSL)
+#elif defined(CONFIG_LSM6DSL)
 	label = DT_LABEL(DT_INST(0, st_lsm6dsl));
-	#else
+#else
 	TF_LITE_REPORT_ERROR(error_reporter,
 					"Unsupported accelerometer\n");
-	#endif
+#endif
 
-	sensor = device_get_binding(label); // TODO: Change
+	sensor = device_get_binding(label);
 	if (sensor == NULL) {
 		TF_LITE_REPORT_ERROR(error_reporter,
 				     "Failed to get accelerometer, label: %s\n",
@@ -59,6 +86,31 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 		TF_LITE_REPORT_ERROR(error_reporter, "Got accelerometer, label: %s\n",
 				     label);
 	}
+
+#if defined(CONFIG_LSM6DSL)
+	/* set accel sampling frequency to 104 Hz */
+	if (sensor_attr_set(sensor, SENSOR_CHAN_ACCEL_XYZ,
+			    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
+		TF_LITE_REPORT_ERROR(error_reporter,
+					"Cannot set sampling frequency for accelerometer.\n");
+	}
+#ifdef CONFIG_LSM6DSL_TRIGGER
+	struct sensor_trigger trig;
+
+	trig.type = SENSOR_TRIG_DATA_READY;
+	trig.chan = SENSOR_CHAN_ACCEL_XYZ;
+
+	if (sensor_trigger_set(sensor, &trig, lsm6dsl_trigger_handler) != 0) {
+		TF_LITE_REPORT_ERROR(error_reporter,
+					"Could not set sensor type and channel\n");
+	}
+#endif
+	if (sensor_sample_fetch(sensor) < 0) {
+		TF_LITE_REPORT_ERROR(error_reporter,
+					"Sensor sample update error\n");
+	}
+#endif
+
 	return kTfLiteOk;
 }
 
@@ -75,15 +127,15 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 		return false;
 	}
 	/* ADXL345 uses return value of sensor_sample_fetch as sample count */
-	#if defined(CONFIG_ADXL345)
+#if defined(CONFIG_ADXL345)
 	/* Skip if there is no data */
 	if (!rc) {
 		return false;
 	}
 	samples_count = rc;
-	#else
+#else
 	samples_count = 1;
-	#endif
+#endif
 
 	for (int i = 0; i < samples_count; i++) {
 		rc = sensor_channel_get(sensor, SENSOR_CHAN_ACCEL_XYZ, accel);
@@ -92,24 +144,15 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 			return false;
 		}
 
-		#if defined(CONFIG_ADXL345)
+#if defined(CONFIG_ADXL345)
 		bufx[begin_index] = (float)sensor_value_to_double(&accel[0]);
 		bufy[begin_index] = (float)sensor_value_to_double(&accel[1]);
 		bufz[begin_index] = (float)sensor_value_to_double(&accel[2]);
-		#else
-		// bufx[begin_index] = convert(&accel[0]);
-		// bufy[begin_index] = convert(&accel[1]);
-		// bufz[begin_index] = convert(&accel[2]);
-		bufx[begin_index] = (float)(sensor_value_to_double(&accel[0]) * 1000);
-		bufy[begin_index] = (float)(sensor_value_to_double(&accel[1]) * 1000);
-		bufz[begin_index] = (float)(sensor_value_to_double(&accel[2]) * 1000);
-		#endif
-		// TODO: REMOVE
-		printf("AX=%10.6f AY=%10.6f AZ=%10.6f \n",
-		       bufx[begin_index],
-		       bufy[begin_index],
-		       bufz[begin_index]);
-		
+#else
+		bufx[begin_index] = (float)convert_ms2_to_mg(&accel_x_out);
+		bufy[begin_index] = (float)convert_ms2_to_mg(&accel_y_out);
+		bufz[begin_index] = (float)convert_ms2_to_mg(&accel_z_out);
+#endif
 		begin_index++;
 		if (begin_index >= BUFLEN) {
 			begin_index = 0;

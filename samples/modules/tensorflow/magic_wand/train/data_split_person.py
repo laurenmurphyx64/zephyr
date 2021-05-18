@@ -61,11 +61,10 @@ def person_split(whole_data, train_names, valid_names, test_names):
 if __name__ == "__main__":
     data = read_data("./data/complete_data")
     train_names = [
-            "hyw", "shiyun", "tangsy", "dengyl", "jiangyh", "xunkai", "negative3",
-            "negative4", "negative5", "negative6"
+            "lauren"
     ]
-    valid_names = ["lsj", "pengxl", "negative2", "negative7"]
-    test_names = ["liucx", "zhangxy", "negative1", "negative8"]
+    valid_names = ["lauren"]
+    test_names = ["lauren"]
     train_data, valid_data, test_data = person_split(data, train_names,
                                                                                                      valid_names, test_names)
     if not os.path.exists("./person_split"):
