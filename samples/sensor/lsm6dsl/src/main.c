@@ -10,9 +10,11 @@
 #include <stdio.h>
 #include <sys/util.h>
 
+#define MS2_IN_G 9.80665
+
 static inline float out_ev(struct sensor_value *val)
 {
-	return (val->val1 + (float)val->val2 / 1000000);
+	return (((val->val1 + (float)val->val2 / 1000000) / MS2_IN_G) * 1000);
 }
 
 static int print_samples;
@@ -142,42 +144,43 @@ void main(void)
 
 	while (1) {
 		/* Erase previous */
-		printk("\0033\014");
-		printf("LSM6DSL sensor samples:\n\n");
+		// printk("\0033\014");
+		// printf("LSM6DSL sensor samples:\n\n");
 
 		/* lsm6dsl accel */
-		sprintf(out_str, "accel x:%f ms/2 y:%f ms/2 z:%f ms/2",
-							  out_ev(&accel_x_out),
-							  out_ev(&accel_y_out),
-							  out_ev(&accel_z_out));
-		printk("%s\n", out_str);
+		printk("%04.2f,%04.2f,%04.2f\r\n", out_ev(&accel_x_out), out_ev(&accel_y_out), out_ev(&accel_z_out));
+		// sprintf(out_str, "accel x:%f ms/2 y:%f ms/2 z:%f ms/2",
+		// 					  out_ev(&accel_x_out),
+		// 					  out_ev(&accel_y_out),
+		// 					  out_ev(&accel_z_out));
+		// printk("%s\n", out_str);
 
-		/* lsm6dsl gyro */
-		sprintf(out_str, "gyro x:%f dps y:%f dps z:%f dps",
-							   out_ev(&gyro_x_out),
-							   out_ev(&gyro_y_out),
-							   out_ev(&gyro_z_out));
-		printk("%s\n", out_str);
+// 		/* lsm6dsl gyro */
+// 		sprintf(out_str, "gyro x:%f dps y:%f dps z:%f dps",
+// 							   out_ev(&gyro_x_out),
+// 							   out_ev(&gyro_y_out),
+// 							   out_ev(&gyro_z_out));
+// 		printk("%s\n", out_str);
 
-#if defined(CONFIG_LSM6DSL_EXT0_LIS2MDL)
-		/* lsm6dsl external magn */
-		sprintf(out_str, "magn x:%f gauss y:%f gauss z:%f gauss",
-							   out_ev(&magn_x_out),
-							   out_ev(&magn_y_out),
-							   out_ev(&magn_z_out));
-		printk("%s\n", out_str);
-#endif
+// #if defined(CONFIG_LSM6DSL_EXT0_LIS2MDL)
+// 		/* lsm6dsl external magn */
+// 		sprintf(out_str, "magn x:%f gauss y:%f gauss z:%f gauss",
+// 							   out_ev(&magn_x_out),
+// 							   out_ev(&magn_y_out),
+// 							   out_ev(&magn_z_out));
+// 		printk("%s\n", out_str);
+// #endif
 
-#if defined(CONFIG_LSM6DSL_EXT0_LPS22HB)
-		/* lsm6dsl external press/temp */
-		sprintf(out_str, "press: %f kPa - temp: %f deg",
-			out_ev(&press_out), out_ev(&temp_out));
-		printk("%s\n", out_str);
-#endif
+// #if defined(CONFIG_LSM6DSL_EXT0_LPS22HB)
+// 		/* lsm6dsl external press/temp */
+// 		sprintf(out_str, "press: %f kPa - temp: %f deg",
+// 			out_ev(&press_out), out_ev(&temp_out));
+// 		printk("%s\n", out_str);
+// #endif
 
-		printk("loop:%d trig_cnt:%d\n\n", ++cnt, lsm6dsl_trig_cnt);
+// 		printk("loop:%d trig_cnt:%d\n\n", ++cnt, lsm6dsl_trig_cnt);
 
 		print_samples = 1;
-		k_sleep(K_MSEC(2000));
+		k_sleep(K_MSEC(50));
 	}
 }
