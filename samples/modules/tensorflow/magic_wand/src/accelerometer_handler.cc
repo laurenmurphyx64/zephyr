@@ -42,23 +42,6 @@ const struct sensor_value odr_attr = {
 	.val2 = 0
 };
 
-#ifdef CONFIG_LSM6DSL_TRIGGER
-static void lsm6dsl_trigger_handler(const struct device *dev,
-				    struct sensor_trigger *trig)
-{
-	static struct sensor_value accel_x, accel_y, accel_z;
-
-	sensor_sample_fetch_chan(dev, SENSOR_CHAN_ACCEL_XYZ);
-	sensor_channel_get(dev, SENSOR_CHAN_ACCEL_X, &accel_x);
-	sensor_channel_get(dev, SENSOR_CHAN_ACCEL_Y, &accel_y);
-	sensor_channel_get(dev, SENSOR_CHAN_ACCEL_Z, &accel_z);
-
-	accel_x_out = accel_x;
-	accel_y_out = accel_y;
-	accel_z_out = accel_z;
-}
-#endif
-
 static inline float convert_ms2_to_mg(struct sensor_value *val)
 {
 	return (((val->val1 + (float)val->val2 / 1000000) / MS2_IN_G) * 1000);
@@ -66,10 +49,9 @@ static inline float convert_ms2_to_mg(struct sensor_value *val)
 
 TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 {
+	/* Get label */
 #if defined(CONFIG_ADXL345)
 	label = DT_LABEL(DT_INST(0, adi_adxl345));
-#elif defined(CONFIG_LSM6DSL)
-	label = DT_LABEL(DT_INST(0, st_lsm6dsl));
 #elif defined(CONFIG_FXOS8700)
 	label = DT_LABEL(DT_INST(0, nxp_fxos8700));
 #else
@@ -78,6 +60,7 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 	return kTfLiteError;
 #endif
 
+	/* Get binding */
 	sensor = device_get_binding(label);
 	if (sensor == NULL) {
 		TF_LITE_REPORT_ERROR(error_reporter,
@@ -89,32 +72,23 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 				     label);
 	}
 
-#if defined(CONFIG_LSM6DSL)
-	/* set accel sampling frequency to 104 Hz */
-	if (sensor_attr_set(sensor, SENSOR_CHAN_ACCEL_XYZ,
-			    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
-		TF_LITE_REPORT_ERROR(error_reporter,
-					"Cannot set sampling frequency for accelerometer.\n");
-		return kTfLiteError;
-	}
-#ifdef CONFIG_LSM6DSL_TRIGGER
-	struct sensor_trigger trig;
+	/* Set sampling frequency for FRXOS8700 */
+#ifdef CONFIG_FXOS8700
+	struct sensor_value attr = {
+		.val1 = 6,
+		.val2 = 250000,
+	};
 
-	trig.type = SENSOR_TRIG_DATA_READY;
-	trig.chan = SENSOR_CHAN_ACCEL_XYZ;
-
-	if (sensor_trigger_set(sensor, &trig, lsm6dsl_trigger_handler) != 0) {
-		TF_LITE_REPORT_ERROR(error_reporter,
-					"Could not set sensor type and channel\n");
+	if (sensor_attr_set(sensor, SENSOR_CHAN_ALL,
+			    SENSOR_ATTR_SAMPLING_FREQUENCY, &attr)) {
+		TF_LITE_REPORT_ERROR(error_reporter, "Could not set sampling frequency.\n",
+				     label);
 		return kTfLiteError;
 	}
 #endif
-	if (sensor_sample_fetch(sensor) < 0) {
-		TF_LITE_REPORT_ERROR(error_reporter,
-					"Sensor sample update error\n");
-		return kTfLiteError;
-	}
-#endif
+
+	int rc = 0;
+	struct sensor_value accel[3];
 
 	return kTfLiteOk;
 }
@@ -154,35 +128,35 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 		bufy[begin_index] = (float)sensor_value_to_double(&accel[1]);
 		bufz[begin_index] = (float)sensor_value_to_double(&accel[2]);
 #else
-		bufx[begin_index] = (float)convert_ms2_to_mg(&accel_x_out);
-		bufy[begin_index] = (float)convert_ms2_to_mg(&accel_y_out);
-		bufz[begin_index] = (float)convert_ms2_to_mg(&accel_z_out);
+		// bufx[begin_index] = (float)convert_ms2_to_mg(&accel_x_out);
+		// bufy[begin_index] = (float)convert_ms2_to_mg(&accel_y_out);
+		// bufz[begin_index] = (float)convert_ms2_to_mg(&accel_z_out);
 		printk("%04.2f,%04.2f,%04.2f\r\n", (float)convert_ms2_to_mg(&accel_x_out), (float)convert_ms2_to_mg(&accel_y_out), (float)convert_ms2_to_mg(&accel_z_out));
 #endif
-		begin_index++;
-		if (begin_index >= BUFLEN) {
-			begin_index = 0;
-		}
-	}
+	// 	begin_index++;
+	// 	if (begin_index >= BUFLEN) {
+	// 		begin_index = 0;
+	// 	}
+	// }
 
-	if (initial && begin_index >= 100) {
-		initial = false;
-	}
+	// if (initial && begin_index >= 100) {
+	// 	initial = false;
+	// }
 
-	if (initial) {
-		return false;
-	}
+	// if (initial) {
+	// 	return false;
+	// }
 
-	int sample = 0;
-	for (int i = 0; i < (length - 3); i += 3) {
-		int ring_index = begin_index + sample - length / 3;
-		if (ring_index < 0) {
-			ring_index += BUFLEN;
-		}
-		input[i] = bufx[ring_index];
-		input[i + 1] = bufy[ring_index];
-		input[i + 2] = bufz[ring_index];
-		sample++;
+	// int sample = 0;
+	// for (int i = 0; i < (length - 3); i += 3) {
+	// 	int ring_index = begin_index + sample - length / 3;
+	// 	if (ring_index < 0) {
+	// 		ring_index += BUFLEN;
+	// 	}
+	// 	input[i] = bufx[ring_index];
+	// 	input[i + 1] = bufy[ring_index];
+	// 	input[i + 2] = bufz[ring_index];
+	// 	sample++;
 	}
 	return true;
 }

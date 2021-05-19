@@ -85,7 +85,7 @@ void main(void)
 
 	while (1) {
 #ifdef CONFIG_FXOS8700_TRIGGER_NONE
-		k_sleep(K_MSEC(160));
+		k_sleep(K_MSEC(50));
 		sensor_sample_fetch(dev);
 #else
 		k_sem_take(&sem, K_FOREVER);
