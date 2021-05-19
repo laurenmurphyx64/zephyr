@@ -72,6 +72,8 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 	label = DT_LABEL(DT_INST(0, adi_adxl345));
 #elif defined(CONFIG_LSM6DSL)
 	label = DT_LABEL(DT_INST(0, st_lsm6dsl));
+#elif defined(CONFIG_FXOS8700)
+	label = DT_LABEL(DT_INST(0, nxp_fxos8700))
 #else
 	TF_LITE_REPORT_ERROR(error_reporter,
 					"Unsupported accelerometer\n");
