@@ -92,27 +92,29 @@ void main(void)
 #endif
 		sensor_channel_get(dev, SENSOR_CHAN_ACCEL_XYZ, accel);
 		/* Print accel x,y,z data */
-		printf("AX=%10.6f AY=%10.6f AZ=%10.6f ",
-		       out_ev(&accel[0]),
-		       out_ev(&accel[1]),
-		       out_ev(&accel[2]));
-#if defined(CONFIG_FXOS8700_MODE_MAGN) || defined(CONFIG_FXOS8700_MODE_HYBRID)
-		struct sensor_value magn[3];
+		// printf("AX=%10.6f AY=%10.6f AZ=%10.6f ",
+		//        out_ev(&accel[0]),
+		//        out_ev(&accel[1]),
+		//        out_ev(&accel[2]));
 
-		sensor_channel_get(dev, SENSOR_CHAN_MAGN_XYZ, magn);
-		/* Print mag x,y,z data */
-		printf("MX=%10.6f MY=%10.6f MZ=%10.6f ",
-		       sensor_value_to_double(&magn[0]),
-		       sensor_value_to_double(&magn[1]),
-		       sensor_value_to_double(&magn[2]));
-#endif
-#ifdef CONFIG_FXOS8700_TEMP
-		struct sensor_value temp;
+		printk("%10.6f,%10.6f,%10.6f\r\n", out_ev(&accel[0]), out_ev(&accel[1]), out_ev(&accel[2]));
+// #if defined(CONFIG_FXOS8700_MODE_MAGN) || defined(CONFIG_FXOS8700_MODE_HYBRID)
+// 		struct sensor_value magn[3];
 
-		sensor_channel_get(dev, SENSOR_CHAN_DIE_TEMP, &temp);
-		/* Print accel x,y,z and mag x,y,z data */
-		printf("T=%10.6f", sensor_value_to_double(&temp));
-#endif
-		printf("\n");
+// 		sensor_channel_get(dev, SENSOR_CHAN_MAGN_XYZ, magn);
+// 		/* Print mag x,y,z data */
+// 		printf("MX=%10.6f MY=%10.6f MZ=%10.6f ",
+// 		       sensor_value_to_double(&magn[0]),
+// 		       sensor_value_to_double(&magn[1]),
+// 		       sensor_value_to_double(&magn[2]));
+// #endif
+// #ifdef CONFIG_FXOS8700_TEMP
+// 		struct sensor_value temp;
+
+// 		sensor_channel_get(dev, SENSOR_CHAN_DIE_TEMP, &temp);
+// 		/* Print accel x,y,z and mag x,y,z data */
+// 		printf("T=%10.6f", sensor_value_to_double(&temp));
+// #endif
+// 		printf("\n");
 	}
 }

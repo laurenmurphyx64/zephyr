@@ -99,8 +99,8 @@ static void lsm6dsl_trigger_handler(const struct device *dev,
 
 void main(void)
 {
-	int cnt = 0;
-	char out_str[64];
+	// int cnt = 0;
+	// char out_str[64];
 	struct sensor_value odr_attr;
 	const struct device *lsm6dsl_dev = device_get_binding(DT_LABEL(DT_INST(0, st_lsm6dsl)));
 
@@ -180,7 +180,7 @@ void main(void)
 
 // 		printk("loop:%d trig_cnt:%d\n\n", ++cnt, lsm6dsl_trig_cnt);
 
-		print_samples = 1;
+		// print_samples = 1;
 		k_sleep(K_MSEC(50));
 	}
 }

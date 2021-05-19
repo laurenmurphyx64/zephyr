@@ -66,17 +66,16 @@ static inline float convert_ms2_to_mg(struct sensor_value *val)
 
 TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 {
-	k_sleep(K_MSEC(1000)); /* Allow the board time to set up accelerometer */
-
 #if defined(CONFIG_ADXL345)
 	label = DT_LABEL(DT_INST(0, adi_adxl345));
 #elif defined(CONFIG_LSM6DSL)
 	label = DT_LABEL(DT_INST(0, st_lsm6dsl));
 #elif defined(CONFIG_FXOS8700)
-	label = DT_LABEL(DT_INST(0, nxp_fxos8700))
+	label = DT_LABEL(DT_INST(0, nxp_fxos8700));
 #else
 	TF_LITE_REPORT_ERROR(error_reporter,
 					"Unsupported accelerometer\n");
+	return kTfLiteError;
 #endif
 
 	sensor = device_get_binding(label);
@@ -84,6 +83,7 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 		TF_LITE_REPORT_ERROR(error_reporter,
 				     "Failed to get accelerometer, label: %s\n",
 				     label);
+		return kTfLiteError;
 	} else {
 		TF_LITE_REPORT_ERROR(error_reporter, "Got accelerometer, label: %s\n",
 				     label);
@@ -95,6 +95,7 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 			    SENSOR_ATTR_SAMPLING_FREQUENCY, &odr_attr) < 0) {
 		TF_LITE_REPORT_ERROR(error_reporter,
 					"Cannot set sampling frequency for accelerometer.\n");
+		return kTfLiteError;
 	}
 #ifdef CONFIG_LSM6DSL_TRIGGER
 	struct sensor_trigger trig;
@@ -105,11 +106,13 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 	if (sensor_trigger_set(sensor, &trig, lsm6dsl_trigger_handler) != 0) {
 		TF_LITE_REPORT_ERROR(error_reporter,
 					"Could not set sensor type and channel\n");
+		return kTfLiteError;
 	}
 #endif
 	if (sensor_sample_fetch(sensor) < 0) {
 		TF_LITE_REPORT_ERROR(error_reporter,
 					"Sensor sample update error\n");
+		return kTfLiteError;
 	}
 #endif
 
@@ -128,13 +131,13 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 		TF_LITE_REPORT_ERROR(error_reporter, "Fetch failed\n");
 		return false;
 	}
-	/* ADXL345 uses return value of sensor_sample_fetch as sample count */
 #if defined(CONFIG_ADXL345)
 	/* Skip if there is no data */
 	if (!rc) {
 		return false;
 	}
-	samples_count = rc;
+	/* ADXL345 uses return value of sensor_sample_fetch as sample count */
+	samples_count = rc; 
 #else
 	samples_count = 1;
 #endif
@@ -154,6 +157,7 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 		bufx[begin_index] = (float)convert_ms2_to_mg(&accel_x_out);
 		bufy[begin_index] = (float)convert_ms2_to_mg(&accel_y_out);
 		bufz[begin_index] = (float)convert_ms2_to_mg(&accel_z_out);
+		printk("%04.2f,%04.2f,%04.2f\r\n", (float)convert_ms2_to_mg(&accel_x_out), (float)convert_ms2_to_mg(&accel_y_out), (float)convert_ms2_to_mg(&accel_z_out));
 #endif
 		begin_index++;
 		if (begin_index >= BUFLEN) {
