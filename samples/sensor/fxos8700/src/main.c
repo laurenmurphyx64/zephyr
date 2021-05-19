@@ -9,6 +9,13 @@
 #include <drivers/sensor.h>
 #include <stdio.h>
 
+#define MS2_IN_G 9.80665
+
+static inline float out_ev(struct sensor_value *val)
+{
+	return (((val->val1 + (float)val->val2 / 1000000) / MS2_IN_G) * 1000);
+}
+
 K_SEM_DEFINE(sem, 0, 1);	/* starts off "not available" */
 
 #if !defined(CONFIG_FXOS8700_TRIGGER_NONE)
@@ -86,9 +93,9 @@ void main(void)
 		sensor_channel_get(dev, SENSOR_CHAN_ACCEL_XYZ, accel);
 		/* Print accel x,y,z data */
 		printf("AX=%10.6f AY=%10.6f AZ=%10.6f ",
-		       sensor_value_to_double(&accel[0]),
-		       sensor_value_to_double(&accel[1]),
-		       sensor_value_to_double(&accel[2]));
+		       out_ev(&accel[0]),
+		       out_ev(&accel[1]),
+		       out_ev(&accel[2]));
 #if defined(CONFIG_FXOS8700_MODE_MAGN) || defined(CONFIG_FXOS8700_MODE_HYBRID)
 		struct sensor_value magn[3];
 
