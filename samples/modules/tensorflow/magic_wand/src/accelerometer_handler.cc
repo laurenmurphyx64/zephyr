@@ -50,15 +50,7 @@ static inline float convert_ms2_to_mg(struct sensor_value *val)
 TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 {
 	/* Get label */
-#if defined(CONFIG_ADXL345)
-	label = DT_LABEL(DT_INST(0, adi_adxl345));
-#elif defined(CONFIG_FXOS8700)
 	label = DT_LABEL(DT_INST(0, nxp_fxos8700));
-#else
-	TF_LITE_REPORT_ERROR(error_reporter,
-					"Unsupported accelerometer\n");
-	return kTfLiteError;
-#endif
 
 	/* Get binding */
 	sensor = device_get_binding(label);
@@ -72,8 +64,6 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 				     label);
 	}
 
-	/* Set sampling frequency for FRXOS8700 */
-#ifdef CONFIG_FXOS8700
 	struct sensor_value attr = {
 		.val1 = 6,
 		.val2 = 250000,
@@ -85,10 +75,6 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 				     label);
 		return kTfLiteError;
 	}
-#endif
-
-	int rc = 0;
-	struct sensor_value accel[3];
 
 	return kTfLiteOk;
 }
@@ -98,65 +84,23 @@ bool ReadAccelerometer(tflite::ErrorReporter *error_reporter, float *input,
 {
 	int rc;
 	struct sensor_value accel[3];
-	int samples_count;
-
+	
 	rc = sensor_sample_fetch(sensor);
 	if (rc < 0) {
 		TF_LITE_REPORT_ERROR(error_reporter, "Fetch failed\n");
 		return false;
 	}
-#if defined(CONFIG_ADXL345)
-	/* Skip if there is no data */
-	if (!rc) {
+
+	rc = sensor_channel_get(sensor, SENSOR_CHAN_ACCEL_XYZ, accel);
+	if (rc < 0) {
+		TF_LITE_REPORT_ERROR(error_reporter, "Update failed: %d\n", rc);
 		return false;
 	}
-	/* ADXL345 uses return value of sensor_sample_fetch as sample count */
-	samples_count = rc; 
-#else
-	samples_count = 1;
-#endif
 
-	for (int i = 0; i < samples_count; i++) {
-		rc = sensor_channel_get(sensor, SENSOR_CHAN_ACCEL_XYZ, accel);
-		if (rc < 0) {
-			TF_LITE_REPORT_ERROR(error_reporter, "ERROR: Update failed: %d\n", rc);
-			return false;
-		}
+	printk("%04.2f,%04.2f,%04.2f\r\n", 
+		(float)convert_ms2_to_mg(&accel_x_out),
+		(float)convert_ms2_to_mg(&accel_y_out),
+		(float)convert_ms2_to_mg(&accel_z_out));
 
-#if defined(CONFIG_ADXL345)
-		bufx[begin_index] = (float)sensor_value_to_double(&accel[0]);
-		bufy[begin_index] = (float)sensor_value_to_double(&accel[1]);
-		bufz[begin_index] = (float)sensor_value_to_double(&accel[2]);
-#else
-		// bufx[begin_index] = (float)convert_ms2_to_mg(&accel_x_out);
-		// bufy[begin_index] = (float)convert_ms2_to_mg(&accel_y_out);
-		// bufz[begin_index] = (float)convert_ms2_to_mg(&accel_z_out);
-		printk("%04.2f,%04.2f,%04.2f\r\n", (float)convert_ms2_to_mg(&accel_x_out), (float)convert_ms2_to_mg(&accel_y_out), (float)convert_ms2_to_mg(&accel_z_out));
-#endif
-	// 	begin_index++;
-	// 	if (begin_index >= BUFLEN) {
-	// 		begin_index = 0;
-	// 	}
-	// }
-
-	// if (initial && begin_index >= 100) {
-	// 	initial = false;
-	// }
-
-	// if (initial) {
-	// 	return false;
-	// }
-
-	// int sample = 0;
-	// for (int i = 0; i < (length - 3); i += 3) {
-	// 	int ring_index = begin_index + sample - length / 3;
-	// 	if (ring_index < 0) {
-	// 		ring_index += BUFLEN;
-	// 	}
-	// 	input[i] = bufx[ring_index];
-	// 	input[i + 1] = bufy[ring_index];
-	// 	input[i + 2] = bufz[ring_index];
-	// 	sample++;
-	}
 	return true;
 }

@@ -98,6 +98,12 @@ void main(void)
 		//        out_ev(&accel[2]));
 
 		printk("%10.6f,%10.6f,%10.6f\r\n", out_ev(&accel[0]), out_ev(&accel[1]), out_ev(&accel[2]));
+
+		printk("%04.2f,%04.2f,%04.2f\r\n", 
+			(float)convert_ms2_to_mg(&accel_x_out),
+			(float)convert_ms2_to_mg(&accel_y_out),
+			(float)convert_ms2_to_mg(&accel_z_out));
+
 // #if defined(CONFIG_FXOS8700_MODE_MAGN) || defined(CONFIG_FXOS8700_MODE_HYBRID)
 // 		struct sensor_value magn[3];
 
