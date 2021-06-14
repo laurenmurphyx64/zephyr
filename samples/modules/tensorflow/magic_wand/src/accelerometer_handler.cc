@@ -50,7 +50,7 @@ TfLiteStatus SetupAccelerometer(tflite::ErrorReporter *error_reporter)
 	/* Give Zephyr boot a good 3s to finish setting up the acclerometer
 	 * (TODO: Remove)
 	 */
-	k_sleep(K_MSEC(3000)); 
+	k_sleep(K_MSEC(3000));
 
 	/* Get label */
 #if defined(CONFIG_ADXL345)
