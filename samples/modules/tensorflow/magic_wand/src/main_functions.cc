@@ -125,6 +125,7 @@ void loop(void)
 	}
 	/* Analyze the results to obtain a prediction */
 	int gesture_index = PredictGesture(interpreter->output(0)->data.f);
+	// printf("Inference: %i\n", gesture_index);
 
 	/* Produce an output */
 	HandleOutput(error_reporter, gesture_index);
