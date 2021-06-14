@@ -377,7 +377,7 @@ static int fxos8700_init(const struct device *dev)
 {
 	const struct fxos8700_config *config = dev->config;
 	struct fxos8700_data *data = dev->data;
-	struct sensor_value odr = {.val1 = 6, .val2 = 250000};
+	struct sensor_value odr = {.val1 = 200, .val2 = 0}; /* HACK: Force up to 200 Hz */
 	const struct device *rst;
 
 	/* Get the I2C device */
