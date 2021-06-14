@@ -1,5 +1,7 @@
 .. _sensor-threat:
 
+// fix spacing
+
 Sensor Device Threat Model
 ##########################
 

@@ -149,6 +149,7 @@ including the 8 principles from [SALT75]_:
 - complete mediation (every access that might be limited must be
   checked for authority and be non-bypassable)
 
+// change spacing
 .. todo: Explain better the constraints of embedded devices, and that
    we typically do edge detection, not at each function. Perhaps
    relate this to input validation below.
