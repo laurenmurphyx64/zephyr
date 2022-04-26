@@ -203,11 +203,8 @@ void *xtensa_excint1_c(int *interrupted_stack)
 	__asm__ volatile("rsr.exccause %0" : "=r"(cause));
 
 	if (cause == EXCCAUSE_LEVEL1_INTERRUPT) {
-
 		return xtensa_int1_c(interrupted_stack);
-
 	} else if (cause == EXCCAUSE_SYSCALL) {
-
 		/* Just report it to the console for now */
 		LOG_ERR(" ** SYSCALL PS %p PC %p",
 			(void *)bsa[BSA_PS_OFF/4], (void *)bsa[BSA_PC_OFF/4]);
@@ -218,18 +215,31 @@ void *xtensa_excint1_c(int *interrupted_stack)
 		 * else it will just loop forever
 		 */
 		bsa[BSA_PC_OFF/4] += 3;
-
 	} else {
 		uint32_t ps = bsa[BSA_PS_OFF/4];
+		void *pc = (void *)bsa[BSA_PC_OFF/4];
 
 		__asm__ volatile("rsr.excvaddr %0" : "=r"(vaddr));
 
+		void *xtensa_arch_except_ill = (void *) ((char *) xtensa_arch_except + 3);
+		/* If ill occurred in xtensa_arch_except, e.g for k_panic,
+		 * set EXCCAUSE to reserved value 63. Imitates SOF's src/debug/panic.c.
+		 * May cause problems for other boards or applications that want to
+		 * use EXCCAUSE 63 for their own purposes.
+		 */
+		if (pc == xtensa_arch_except_ill && cause == 0) {
+			cause = 63;
+			__asm__ volatile("wsr.exccause %0" : : "r"(cause));
+		}
+
 		LOG_ERR(" ** FATAL EXCEPTION");
 		LOG_ERR(" ** CPU %d EXCCAUSE %d (%s)",
-			arch_curr_cpu()->id, cause,
-			z_xtensa_exccause(cause));
+			arch_curr_cpu()->id, cause, z_xtensa_exccause(cause));
+		if (cause == 63) {
+			LOG_ERR(" **     (k_fatal_error_reason: %d)", bsa[BSA_A2_OFF/4]);
+		}
 		LOG_ERR(" **  PC %p VADDR %p",
-			(void *)bsa[BSA_PC_OFF/4], (void *)vaddr);
+			pc, (void *)vaddr);
 		LOG_ERR(" **  PS %p", (void *)bsa[BSA_PS_OFF/4]);
 		LOG_ERR(" **    (INTLEVEL:%d EXCM: %d UM:%d RING:%d WOE:%d OWB:%d CALLINC:%d)",
 			get_bits(0, 4, ps), get_bits(4, 1, ps),
