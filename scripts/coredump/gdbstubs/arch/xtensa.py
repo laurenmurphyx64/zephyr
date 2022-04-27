@@ -18,6 +18,10 @@ class XtensaSoc():
     UNKNOWN = 0
     SAMPLE_CONTROLLER = 1
     ESP32 = 2
+    INTEL_ADSP_CAVS15 = 3
+    INTEL_ADSP_CAVS18 = 4
+    INTEL_ADSP_CAVS20 = 5
+    INTEL_ADSP_CAVS25 = 6
 
 
 def get_soc_definition(soc):
@@ -25,6 +29,14 @@ def get_soc_definition(soc):
         return XtensaSoc_SampleController
     elif soc == XtensaSoc.ESP32:
         return XtensaSoc_ESP32
+    elif soc == XtensaSoc.INTEL_ADSP_CAVS15:
+        return XtensaSoc_Intel_Adsp_CAVS
+    elif soc == XtensaSoc.INTEL_ADSP_CAVS18:
+        return XtensaSoc_Intel_Adsp_CAVS
+    elif soc == XtensaSoc.INTEL_ADSP_CAVS20:
+        return XtensaSoc_Intel_Adsp_CAVS
+    elif soc == XtensaSoc.INTEL_ADSP_CAVS25:
+        return XtensaSoc_Intel_Adsp_CAVS
     else:
         raise NotImplementedError
 
@@ -62,8 +74,8 @@ class GdbStub_Xtensa(GdbStub):
     GDB_SIGNAL_DEFAULT = 7
 
     # Mapping based on section 4.4.1.5 of the
-    # Xtensa ISA Reference Manual
-    # (Table 4–64. Exception Causes)
+    # Xtensa ISA Reference Manual (Table 4–64. Exception Causes)
+    # Somewhat arbitrary; included only because GDB requests it
     GDB_SIGNAL_MAPPING = {
         ExceptionCodes.ILLEGAL_INSTRUCTION: 4,
         ExceptionCodes.INSTR_FETCH_ERROR: 7,
@@ -172,11 +184,15 @@ class GdbStub_Xtensa(GdbStub):
 
         self.put_gdb_packet(pkt)
 
-
+    # (ESP32 and sample_controller GDB don't send p, but others do)
     def handle_register_single_read_packet(self, pkt):
-        # Mark registers as "<unavailable>". 'p' packets are not sent for the registers
-        # currently handled in this file so we can safely reply "xxxxxxxx" here.
-        self.put_gdb_packet(b'x' * 8)
+        # format is pXX, where XX is the hex representation of the idx
+        regIdx = int('0x' + pkt[1:].decode('utf8'), 16)
+        try:
+            bval = struct.pack(self.reg_fmt, self.registers[regIdx])
+            self.put_gdb_packet(binascii.hexlify(bval))
+        except KeyError:
+            self.put_gdb_packet(b'x' * 8)
 
 # The following classes map registers to their index (idx) on
 # a specific SOC. Since SOCs can have different numbers of
@@ -196,9 +212,9 @@ class GdbStub_Xtensa(GdbStub):
 class XtensaSoc_SampleController:
     ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIII'
 
-    # This fits the maximum possible register index (110)
-    # unlike on ESP32 GDB, there doesn't seem to be an
-    # actual hard limit to how big the g packet can be
+    # This fits the maximum possible register index (110).
+    # Unlike on ESP32 GDB, there doesn't seem to be an
+    # actual hard limit to how big the g packet can be.
     SOC_GDB_GPKT_BIN_SIZE = 444
 
     class RegNum(Enum):
@@ -228,6 +244,7 @@ class XtensaSoc_SampleController:
         WINDOWBASE = 34
         WINDOWSTART = 35
 
+
 # espressif xtensa-overlays -> xtensa_esp32/gdb/gdb/xtensa-config.c
 class XtensaSoc_ESP32:
     ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
@@ -236,7 +253,7 @@ class XtensaSoc_ESP32:
     # 104, which prevents us from sending An registers directly.
     # We get around this by assigning each An in the dump to ARn
     # and setting WINDOWBASE to 0 and WINDOWSTART to 1; ESP32 GDB
-    # will recalculate the corresponding An
+    # will recalculate the corresponding An.
     SOC_GDB_GPKT_BIN_SIZE = 420
 
     class RegNum(Enum):
@@ -267,3 +284,46 @@ class XtensaSoc_ESP32:
         LCOUNT = 67
         WINDOWBASE = 69
         WINDOWSTART = 70
+
+
+# sdk-ng -> overlays/xtensa_intel_apl/gdb/gdb/xtensa-config.c
+class XtensaSoc_Intel_Adsp_CAVS:
+    ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
+
+    # There seems to be a packet size restriction in the sense
+    # that if you send all the registers below (up to index 173)
+    # GDB incorrectly assigns 0 to EXCCAUSE / EXCVADDR... for some
+    # reason. Since APL GDB sends p packets for every An register
+    # regardless of whether it was sent in the g packet, I decided to
+    # somewhat arbitrarily shrink it to include up to A1, which fixed
+    # the issue.
+    SOC_GDB_GPKT_BIN_SIZE = 640
+
+    class RegNum(Enum):
+        PC = 0
+        EXCCAUSE = 148
+        EXCVADDR = 154
+        SAR = 68
+        PS = 74
+        SCOMPARE1 = 77
+        A0 = 158
+        A1 = 159
+        A2 = 160
+        A3 = 161
+        A4 = 162
+        A5 = 163
+        A6 = 164
+        A7 = 165
+        A8 = 166
+        A9 = 167
+        A10 = 168
+        A11 = 169
+        A12 = 170
+        A13 = 171
+        A14 = 172
+        A15 = 173
+        LBEG = 65
+        LEND = 66
+        LCOUNT = 67
+        WINDOWBASE = 70
+        WINDOWSTART = 71
