@@ -4,6 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from json import tool
 from gdbstubs.arch.x86 import GdbStub_x86
 from gdbstubs.arch.x86_64 import GdbStub_x86_64
 from gdbstubs.arch.arm_cortex_m import GdbStub_ARM_CortexM
@@ -18,7 +19,7 @@ class TgtCode:
     RISC_V = 4
     XTENSA = 5
 
-def get_gdbstub(logfile, elffile):
+def get_gdbstub(logfile, elffile, toolchain):
     stub = None
 
     tgt_code = logfile.log_hdr['tgt_code']
@@ -32,6 +33,6 @@ def get_gdbstub(logfile, elffile):
     elif tgt_code == TgtCode.RISC_V:
         stub = GdbStub_RISC_V(logfile=logfile, elffile=elffile)
     elif tgt_code == TgtCode.XTENSA:
-        stub = GdbStub_Xtensa(logfile=logfile, elffile=elffile)
+        stub = GdbStub_Xtensa(logfile=logfile, elffile=elffile, toolchain=toolchain)
 
     return stub

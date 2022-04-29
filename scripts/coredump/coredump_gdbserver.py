@@ -32,6 +32,14 @@ def parse_args():
                         help="GDB server port")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Print more information")
+    # Made an option since only Xtensa will fail without it.
+    # It's a little bad to require an "option", but it's better
+    # than the alternative of forcing people on non-Xtensa arches
+    # to enter their arch so we can determine at argparse time
+    # whether or not the toolchain is required
+    parser.add_argument("-t", "--toolchain",
+                        choices=["zephyr", "xcc", "espressif"],
+                        help="Toolchain. Used and required only by Xtensa.")
 
     return parser.parse_args()
 
@@ -97,7 +105,7 @@ def main():
         logf.close()
         sys.exit(1)
 
-    gdbstub = gdbstubs.get_gdbstub(logf, elff)
+    gdbstub = gdbstubs.get_gdbstub(logf, elff, args.toolchain)
 
     # Start a GDB server
     gdbserver = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

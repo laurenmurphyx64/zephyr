@@ -7,6 +7,7 @@
 import binascii
 import logging
 import struct
+import sys
 
 from enum import Enum
 from gdbstubs.gdbstub import GdbStub
@@ -14,7 +15,7 @@ from gdbstubs.gdbstub import GdbStub
 logger = logging.getLogger("gdbstub")
 
 
-class XtensaSoc():
+class GdbRegDesc():
     UNKNOWN = 0
     SAMPLE_CONTROLLER = 1
     ESP32 = 2
@@ -24,19 +25,59 @@ class XtensaSoc():
     INTEL_ADSP_CAVS25 = 6
 
 
-def get_soc_definition(soc):
-    if soc == XtensaSoc.SAMPLE_CONTROLLER:
-        return XtensaSoc_SampleController
-    elif soc == XtensaSoc.ESP32:
-        return XtensaSoc_ESP32
-    elif soc == XtensaSoc.INTEL_ADSP_CAVS15:
-        return XtensaSoc_Intel_Adsp_CAVS
-    elif soc == XtensaSoc.INTEL_ADSP_CAVS18:
-        return XtensaSoc_Intel_Adsp_CAVS
-    elif soc == XtensaSoc.INTEL_ADSP_CAVS20:
-        return XtensaSoc_Intel_Adsp_CAVS
-    elif soc == XtensaSoc.INTEL_ADSP_CAVS25:
-        return XtensaSoc_Intel_Adsp_CAVS
+# The previous version of this script didn't need to know
+# what toolchain Zephyr was built with; it assumed sample_controller
+# was built with the Zephyr SDK and ESP32 with Espressif's.
+# However, if a SOC can be built by two separate toolchains,
+# there is a chance that the GDBs provided by the toolchains will
+# assign different indices to the same registers. For example, the
+# Intel ADSP family of SOCs can be built with both Zephyr's
+# SDK and Cadence's XCC toolchain. For the APL SOC,
+# the SDK's GDB assigns PC the index 0, while XCC's GDB assigns
+# it the index 32.
+#
+# The Espressif value isn't really required, since ESP32 can
+# only be built with Espressif's toolchain, but it's included for
+# completeness.
+class XtensaToolchain():
+    UNKNOWN = 0
+    ZEPHYR = 1
+    XCC = 2
+    ESPRESSIF = 3
+
+
+def get_toolchain(toolchain):
+    if not toolchain:
+        logger.error("Tried to read Xtensa coredump without -t or " + \
+            "-toolchain, exiting...")
+        sys.exit(1)
+    elif toolchain == "zephyr":
+        return XtensaToolchain.ZEPHYR
+    elif toolchain == "xcc":
+        return XtensaToolchain.XCC
+    elif toolchain == "espressif":
+        return XtensaToolchain.ESPRESSIF
+    else:
+        return XtensaToolchain.UNKNOWN
+
+
+def get_soc_definition(soc, toolchain):
+    if soc == GdbRegDesc.SAMPLE_CONTROLLER:
+        return GdbRegDesc_SampleController
+    elif soc == GdbRegDesc.ESP32:
+        return GdbRegDesc_ESP32
+    elif soc in [GdbRegDesc.INTEL_ADSP_CAVS15, GdbRegDesc.INTEL_ADSP_CAVS18,
+             GdbRegDesc.INTEL_ADSP_CAVS20, GdbRegDesc.INTEL_ADSP_CAVS25]:
+        if toolchain == XtensaToolchain.ZEPHYR:
+            return GdbRegDesc_Intel_Adsp_CAVS_Zephyr
+        elif toolchain == XtensaToolchain.XCC:
+            return GdbRegDesc_Intel_Adsp_CAVS_XCC
+        elif toolchain == XtensaToolchain.ESPRESSIF:
+            logger.error("Can't use espressif toolchain with CAVS. " +
+                "Use zephyr or xcc instead. Exiting...")
+            sys.exit(1)
+        else:
+            raise NotImplementedError
     else:
         raise NotImplementedError
 
@@ -101,8 +142,9 @@ class GdbStub_Xtensa(GdbStub):
 
     reg_fmt = "<I"
 
-    def __init__(self, logfile, elffile):
+    def __init__(self, logfile, elffile, toolchain):
         super().__init__(logfile=logfile, elffile=elffile)
+        self.toolchain = get_toolchain(toolchain)
         self.registers = None
         self.exception_code = None
         self.gdb_signal = self.GDB_SIGNAL_DEFAULT
@@ -116,8 +158,8 @@ class GdbStub_Xtensa(GdbStub):
 
         # Get SOC in order to get correct format for unpack
         self.soc = bytearray(arch_data_blk)[0]
-        self.xtensaSoc = get_soc_definition(self.soc)
-        tu = struct.unpack(self.xtensaSoc.ARCH_DATA_BLK_STRUCT, arch_data_blk)
+        self.gdbRegDesc = get_soc_definition(self.soc, self.toolchain)
+        tu = struct.unpack(self.gdbRegDesc.ARCH_DATA_BLK_STRUCT, arch_data_blk)
 
         self.registers = dict()
 
@@ -128,17 +170,17 @@ class GdbStub_Xtensa(GdbStub):
 
     def map_registers(self, tu):
         i = 2
-        for r in self.xtensaSoc.RegNum:
+        for r in self.gdbRegDesc.RegNum:
             regNum = r.value
             # Dummy WINDOWBASE and WINDOWSTART to enable GDB
             # without dumping them and all AR registers;
             # avoids interfering with interrupts / exceptions
-            if r == self.xtensaSoc.RegNum.WINDOWBASE:
+            if r == self.gdbRegDesc.RegNum.WINDOWBASE:
                 self.registers[regNum] = 0
-            elif r == self.xtensaSoc.RegNum.WINDOWSTART:
+            elif r == self.gdbRegDesc.RegNum.WINDOWSTART:
                 self.registers[regNum] = 1
             else:
-                if r == self.xtensaSoc.RegNum.EXCCAUSE:
+                if r == self.gdbRegDesc.RegNum.EXCCAUSE:
                     self.exception_code = tu[i]
                 self.registers[regNum] = tu[i]
             i += 1
@@ -166,12 +208,12 @@ class GdbStub_Xtensa(GdbStub):
         pkt = b''
 
         GDB_G_PKT_MAX_REG = \
-            max([regNum.value for regNum in self.xtensaSoc.RegNum])
+            max([regNum.value for regNum in self.gdbRegDesc.RegNum])
 
         # We try to send as many of the registers listed
         # as possible, but we are constrained by the
         # maximum length of the g packet
-        while idx <= GDB_G_PKT_MAX_REG and idx * 4 < self.xtensaSoc.SOC_GDB_GPKT_BIN_SIZE:
+        while idx <= GDB_G_PKT_MAX_REG and idx * 4 < self.gdbRegDesc.SOC_GDB_GPKT_BIN_SIZE:
             if idx in self.registers:
                 bval = struct.pack(self.reg_fmt, self.registers[idx])
                 pkt += binascii.hexlify(bval)
@@ -194,13 +236,12 @@ class GdbStub_Xtensa(GdbStub):
         except KeyError:
             self.put_gdb_packet(b'x' * 8)
 
-# The following classes map registers to their index (idx) on
-# a specific SOC. Since SOCs can have different numbers of
-# registers (e.g. 32 VS 64 ar), the index of a register will
-# differ per SOC. See xtensa_config.c.
+
+# The following classes map registers to their index used by
+# the GDB of a specific toolchain. See xtensa_config.c.
 
 # WARNING: IF YOU CHANGE THE ORDER OF THE REGISTERS IN ONE
-# SOC's MAPPING, YOU MUST CHANGE THE ORDER TO MATCH IN THE OTHERS
+# TOOLCHAIN'S MAPPING, YOU MUST CHANGE THE ORDER TO MATCH IN THE OTHERS
 # AND IN arch/xtensa/core/coredump.c's xtensa_arch_block.r.
 # See map_registers.
 
@@ -208,8 +249,10 @@ class GdbStub_Xtensa(GdbStub):
 # values are dummied by this script, they have to be last in the
 # mapping below.
 
+
+# sample_controller is unique to Zephyr SDK
 # sdk-ng -> overlays/xtensa_sample_controller/gdb/gdb/xtensa-config.c
-class XtensaSoc_SampleController:
+class GdbRegDesc_SampleController:
     ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIII'
 
     # This fits the maximum possible register index (110).
@@ -245,8 +288,9 @@ class XtensaSoc_SampleController:
         WINDOWSTART = 35
 
 
+# ESP32 is unique to espressif toolchain
 # espressif xtensa-overlays -> xtensa_esp32/gdb/gdb/xtensa-config.c
-class XtensaSoc_ESP32:
+class GdbRegDesc_ESP32:
     ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
 
     # Maximum index register that can be sent in a group packet is
@@ -287,7 +331,7 @@ class XtensaSoc_ESP32:
 
 
 # sdk-ng -> overlays/xtensa_intel_apl/gdb/gdb/xtensa-config.c
-class XtensaSoc_Intel_Adsp_CAVS:
+class GdbRegDesc_Intel_Adsp_CAVS_Zephyr:
     ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
 
     # There seems to be a packet size restriction in the sense
@@ -298,6 +342,7 @@ class XtensaSoc_Intel_Adsp_CAVS:
     # somewhat arbitrarily shrink it to include up to A1, which fixed
     # the issue.
     SOC_GDB_GPKT_BIN_SIZE = 640
+
 
     class RegNum(Enum):
         PC = 0
@@ -327,3 +372,43 @@ class XtensaSoc_Intel_Adsp_CAVS:
         LCOUNT = 67
         WINDOWBASE = 70
         WINDOWSTART = 71
+
+
+# Reverse-engineered from:
+# sof -> src/debug/gdb/gdb.c
+# sof -> src/arch/xtensa/include/xtensa/specreg.h
+class GdbRegDesc_Intel_Adsp_CAVS_XCC:
+    ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
+
+    # xt-gdb doesn't appear to use the g packet at all
+    SOC_GDB_GPKT_BIN_SIZE = 0
+
+
+    class RegNum(Enum):
+        PC = 32
+        EXCCAUSE = 744
+        EXCVADDR = 750
+        SAR = 515
+        PS = 742
+        SCOMPARE1 = 524
+        A0 = 256
+        A1 = 257
+        A2 = 258
+        A3 = 259
+        A4 = 260
+        A5 = 261
+        A6 = 262
+        A7 = 263
+        A8 = 264
+        A9 = 265
+        A10 = 266
+        A11 = 267
+        A12 = 268
+        A13 = 269
+        A14 = 270
+        A15 = 271
+        LBEG = 512
+        LEND = 513
+        LCOUNT = 514
+        WINDOWBASE = 584
+        WINDOWSTART = 585
