@@ -8,28 +8,24 @@
 #include <zephyr/debug/coredump.h>
 #include <xtensa-asm2.h>
 
-#define ARCH_HDR_VER			1
-#define XTENSA_BLOCK_HDR_VER	1
-
-enum xtensa_soc_code {
-	XTENSA_SOC_UNKNOWN = 0,
-	XTENSA_SOC_SAMPLE_CONTROLLER,
-	XTENSA_SOC_ESP32,
-};
+#define ARCH_HDR_VER				1
+#define XTENSA_BLOCK_HDR_VER		2
+#define XTENSA_BLOCK_HDR_DUMMY_SOC	255
 
 struct xtensa_arch_block {
-	/* Each Xtensa SOC can omit registers (e.g. loop
-	 * registers) or assign different index numbers
-	 * in xtensa-config.c. GDB identifies registers
-	 * based on these indices
-	 *
-	 * (This must be the first field or the GDB server
-	 * won't be able to unpack the struct while parsing)
+	/* Dummied in versions 2 onward, which require the
+	 * user to pass the SOC as an argument to the coredump
+	 * GDB server Python script. The field's value may
+	 * no longer be used to identify the SOC, but it
+	 * is still necessary for backwards compatibility:
+	 * the script's first step reading a version 1 coredump
+	 * is reading the first byte for the SOC so it can
+	 * unpack the other fields.
 	 */
 	uint8_t		soc;
 
-	/* Future versions of Xtensa coredump
-	 * may expand minimum set of registers
+	/* Future versions of Xtensa coredump may expand
+	 * minimum set of registers
 	 *
 	 * (This should stay the second field for the same
 	 * reason as the first once we have more versions)
@@ -101,13 +97,7 @@ void arch_coredump_info_dump(const z_arch_esf_t *esf)
 
 	arch_blk.version = XTENSA_BLOCK_HDR_VER;
 
-#if CONFIG_SOC_XTENSA_SAMPLE_CONTROLLER
-	arch_blk.soc = XTENSA_SOC_SAMPLE_CONTROLLER;
-#elif CONFIG_SOC_ESP32
-	arch_blk.soc = XTENSA_SOC_ESP32;
-#else
-	arch_blk.soc = XTENSA_SOC_UNKNOWN;
-#endif
+	arch_blk.soc = XTENSA_BLOCK_HDR_DUMMY_SOC;
 
 	__asm__ volatile("rsr.exccause %0" : "=r"(arch_blk.r.exccause));
 
