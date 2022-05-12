@@ -18,7 +18,7 @@ class TgtCode:
     RISC_V = 4
     XTENSA = 5
 
-def get_gdbstub(logfile, elffile):
+def get_gdbstub(logfile, elffile, toolchain, soc):
     stub = None
 
     tgt_code = logfile.log_hdr['tgt_code']
@@ -32,6 +32,6 @@ def get_gdbstub(logfile, elffile):
     elif tgt_code == TgtCode.RISC_V:
         stub = GdbStub_RISC_V(logfile=logfile, elffile=elffile)
     elif tgt_code == TgtCode.XTENSA:
-        stub = GdbStub_Xtensa(logfile=logfile, elffile=elffile)
+        stub = GdbStub_Xtensa(logfile=logfile, elffile=elffile, toolchain=toolchain, soc=soc)
 
     return stub
