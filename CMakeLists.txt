@@ -317,6 +317,19 @@ endif()
 zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,warning_base>>)
 zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler-cpp,warning_base>>)
 
+# @Intent: Set XTENSA_TOOLCHAIN_VARIANT macro required for Xtensa coredump
+if(CONFIG_XTENSA AND CONFIG_DEBUG_COREDUMP)
+  if(${ZEPHYR_TOOLCHAIN_VARIANT} STREQUAL "zephyr")
+    zephyr_compile_options(-DXTENSA_TOOLCHAIN_VARIANT=1)
+  elseif(${ZEPHYR_TOOLCHAIN_VARIANT} STREQUAL "xcc")
+    zephyr_compile_options(-DXTENSA_TOOLCHAIN_VARIANT=2)
+  elseif(${ZEPHYR_TOOLCHAIN_VARIANT} STREQUAL "espressif")
+    zephyr_compile_options(-DXTENSA_TOOLCHAIN_VARIANT=3)
+  else()
+    zephyr_compile_options(-DXTENSA_TOOLCHAIN_VARIANT=0)
+  endif()
+endif()
+
 # ==========================================================================
 #
 # cmake -DW=... settings

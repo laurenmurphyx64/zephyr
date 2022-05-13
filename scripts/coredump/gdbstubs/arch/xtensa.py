@@ -22,10 +22,7 @@ class XtensaSoc(Enum):
     UNKNOWN = 0
     SAMPLE_CONTROLLER = 1
     ESP32 = 2
-    INTEL_ADSP_CAVS15 = 3
-    INTEL_ADSP_CAVS18 = 4
-    INTEL_ADSP_CAVS20 = 5
-    INTEL_ADSP_CAVS25 = 6
+    INTEL_ADSP_CAVS = 3
 
 
 # The previous version of this script didn't need to know
@@ -42,8 +39,6 @@ class XtensaSoc(Enum):
 # (The Espressif value isn't really required, since ESP32 can
 # only be built with Espressif's toolchain, but it's included for
 # completeness.)
-#
-# Must match --toolchain arg options; see get_toolchain
 class XtensaToolchain(Enum):
     UNKNOWN = 0
     ZEPHYR = 1
@@ -51,37 +46,12 @@ class XtensaToolchain(Enum):
     ESPRESSIF = 3
 
 
-def get_soc(soc):
-    if not soc:
-        logger.error("Tried to read Xtensa v2+ coredump without -s / " + \
-            "-soc. See --help. Exiting...")
-        sys.exit(1)
-    else:
-        try:
-            return XtensaSoc[soc.upper()]
-        except KeyError:
-            return XtensaSoc.UNKNOWN
-
-
-def get_toolchain(toolchain):
-    if not toolchain:
-        logger.error("Tried to read Xtensa coredump without -t / " + \
-            "-toolchain. See --help. Exiting...")
-        sys.exit(1)
-    else:
-        try:
-            return XtensaToolchain[toolchain.upper()]
-        except KeyError:
-            return XtensaToolchain.UNKNOWN
-
-
 def get_gdb_reg_definition(soc, toolchain):
     if soc == XtensaSoc.SAMPLE_CONTROLLER:
         return GdbRegDef_Sample_Controller
     elif soc == XtensaSoc.ESP32:
         return GdbRegDef_ESP32
-    elif soc in [XtensaSoc.INTEL_ADSP_CAVS15, XtensaSoc.INTEL_ADSP_CAVS18,
-             XtensaSoc.INTEL_ADSP_CAVS20, XtensaSoc.INTEL_ADSP_CAVS25]:
+    elif soc == XtensaSoc.INTEL_ADSP_CAVS:
         if toolchain == XtensaToolchain.ZEPHYR:
             return GdbRegDef_Intel_Adsp_CAVS_Zephyr
         elif toolchain == XtensaToolchain.XCC:
@@ -160,11 +130,9 @@ class GdbStub_Xtensa(GdbStub):
 
     reg_fmt = "<I"
 
-    def __init__(self, logfile, elffile, toolchain, soc):
+    def __init__(self, logfile, elffile):
         super().__init__(logfile=logfile, elffile=elffile)
 
-        self.toolchain = get_toolchain(toolchain)
-        self.soc = soc # get / validate during arch block parse
         self.registers = None
         self.exception_code = None
         self.gdb_signal = self.GDB_SIGNAL_DEFAULT
@@ -176,27 +144,34 @@ class GdbStub_Xtensa(GdbStub):
     def parse_arch_data_block(self):
         arch_data_blk = self.logfile.get_arch_data()['data']
 
-        # Get SOC in order to get correct format for unpack.
-        # v2 or higher coredump requires user-input SOC, while
-        # v1 coredump SOC is provided in the block
-        arch_data_blk_soc = bytearray(arch_data_blk)[0]
-        if arch_data_blk_soc == XTENSA_BLOCK_HDR_DUMMY_SOC:
-            self.soc = get_soc(self.soc)
+        self.version = struct.unpack('H', arch_data_blk[1:3])[0]
+
+        # Get SOC and toolchain to get correct format for unpack
+        self.soc = XtensaSoc(bytearray(arch_data_blk)[0])
+        if self.version >= 2:
+            self.toolchain = XtensaToolchain(bytearray(arch_data_blk)[3])
+            arch_data_blk_regs = arch_data_blk[4:]
         else:
-            self.soc = arch_data_blk_soc
+            # v1 only supported ESP32 and sample_controller, each of which
+            # only build with one toolchain
+            if self.soc == XtensaSoc.ESP32:
+                self.toolchain = XtensaToolchain.ESPRESSIF
+            else:
+                self.toolchain = XtensaToolchain.ZEPHYR
+            arch_data_blk_regs = arch_data_blk[3:]
 
         self.gdb_reg_def = get_gdb_reg_definition(self.soc, self.toolchain)
-        tu = struct.unpack(self.gdb_reg_def.ARCH_DATA_BLK_STRUCT, arch_data_blk)
+
+        tu = struct.unpack(self.gdb_reg_def.ARCH_DATA_BLK_STRUCT_REGS,
+                arch_data_blk_regs)
 
         self.registers = dict()
-
-        self.version = tu[1]
 
         self.map_registers(tu)
 
 
     def map_registers(self, tu):
-        i = 2
+        i = 0
         for r in self.gdb_reg_def.RegNum:
             reg_num = r.value
             # Dummy WINDOWBASE and WINDOWSTART to enable GDB
@@ -277,7 +252,7 @@ class GdbStub_Xtensa(GdbStub):
 # sample_controller is unique to Zephyr SDK
 # sdk-ng -> overlays/xtensa_sample_controller/gdb/gdb/xtensa-config.c
 class GdbRegDef_Sample_Controller:
-    ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIII'
+    ARCH_DATA_BLK_STRUCT_REGS = '<IIIIIIIIIIIIIIIIIIIIII'
 
     # This fits the maximum possible register index (110).
     # Unlike on ESP32 GDB, there doesn't seem to be an
@@ -316,7 +291,7 @@ class GdbRegDef_Sample_Controller:
 # ESP32 is unique to espressif toolchain
 # espressif xtensa-overlays -> xtensa_esp32/gdb/gdb/xtensa-config.c
 class GdbRegDef_ESP32:
-    ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
+    ARCH_DATA_BLK_STRUCT_REGS = '<IIIIIIIIIIIIIIIIIIIIIIIII'
 
     # Maximum index register that can be sent in a group packet is
     # 104, which prevents us from sending An registers directly.
@@ -357,7 +332,7 @@ class GdbRegDef_ESP32:
 
 # sdk-ng -> overlays/xtensa_intel_apl/gdb/gdb/xtensa-config.c
 class GdbRegDef_Intel_Adsp_CAVS_Zephyr:
-    ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
+    ARCH_DATA_BLK_STRUCT_REGS = '<IIIIIIIIIIIIIIIIIIIIIIIII'
 
     # If you send all the registers below (up to index 173)
     # GDB incorrectly assigns 0 to EXCCAUSE / EXCVADDR... for some
@@ -401,7 +376,7 @@ class GdbRegDef_Intel_Adsp_CAVS_Zephyr:
 # sof -> src/debug/gdb/gdb.c
 # sof -> src/arch/xtensa/include/xtensa/specreg.h
 class GdbRegDef_Intel_Adsp_CAVS_XCC:
-    ARCH_DATA_BLK_STRUCT = '<BHIIIIIIIIIIIIIIIIIIIIIIIII'
+    ARCH_DATA_BLK_STRUCT_REGS = '<IIIIIIIIIIIIIIIIIIIIIIIII'
 
     # xt-gdb doesn't use the g packet at all
     SOC_GDB_GPKT_BIN_SIZE = 0
