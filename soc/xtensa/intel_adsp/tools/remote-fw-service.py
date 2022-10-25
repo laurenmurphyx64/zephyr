@@ -14,7 +14,7 @@ import hashlib
 import queue
 from urllib.parse import urlparse
 
-# Global variable use to sync between log and request services.
+# Global variable used to sync between log and request services
 runner = None
 
 # INADDR_ANY as default
@@ -32,54 +32,56 @@ MAX_CMD_SZ = 16
 ERR_FAIL = 1
 
 # Define the header format and size for
-# transmiting the firmware
+# transmitting the firmware
 PACKET_HEADER_FORMAT_FW = 'I 42s 32s'
 HEADER_SZ = 78
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO,
+    format='%(levelname)s: %(name)s: %(message)s')
 log = logging.getLogger("remote-fw")
 
 
 class adsp_request_handler(socketserver.BaseRequestHandler):
     """
-    The request handler class for control the actions of server.
+    Request handler for server
     """
 
     def receive_fw(self):
-        log.info("Receiving...")
         # Receive the header first
         d = self.request.recv(HEADER_SZ)
 
-        # Unpacked the header data
+        # Unpack the header data
         # Include size(4), filename(42) and MD5(32)
         header = d[:HEADER_SZ]
         total = d[HEADER_SZ:]
         s = struct.Struct(PACKET_HEADER_FORMAT_FW)
-        fsize, fname, md5_tx_b = s.unpack(header)
-        log.info(f'size:{fsize}, filename:{fname}, MD5:{md5_tx_b}')
+        fsize, fname, md5_tx = s.unpack(header)
+        md5_tx = md5_tx.decode('utf-8')
+        fname = fname.decode('utf-8')
+
+        log.info(f"Received firmware header: {{ size: {fsize} bytes, filename: {fname}, MD5: {md5_tx} }}")
 
         # Receive the firmware. We only receive the specified amount of bytes.
         while len(total) < fsize:
             data = self.request.recv(min(BUF_SIZE, fsize - len(total)))
             if not data:
-                raise EOFError("truncated firmware file")
+                raise EOFError("Truncated firmware file")
             total += data
 
-        log.info(f"Done Receiving {len(total)}.")
+        log.debug(f"Received all {len(total)} bytes expected")
 
         try:
             with open(fname,'wb') as f:
                 f.write(total)
         except Exception as e:
-            log.error(f"Get exception {e} during FW transfer.")
+            log.error(f"Exception occurred {e} during firmware download!")
             return None
 
         # Check the MD5 of the firmware
         md5_rx = hashlib.md5(total).hexdigest()
-        md5_tx = md5_tx_b.decode('utf-8')
 
         if md5_tx != md5_rx:
-            log.error(f'MD5 mismatch: {md5_tx} vs. {md5_rx}')
+            log.error(f'MD5 mismatch: {md5_tx} VS {md5_rx}')
             return None
 
         return fname
@@ -87,64 +89,60 @@ class adsp_request_handler(socketserver.BaseRequestHandler):
     def do_download(self):
         recv_file = self.receive_fw()
 
-        if recv_file:
-            recv_file = recv_file.decode('utf-8')
+        if recv_file and os.path.exists(recv_file):
+            runner.set_fw_ready(recv_file)
+            return 0
 
-            if os.path.exists(recv_file):
-                runner.set_fw_ready(recv_file)
-                return 0
-
-        log.error("Cannot find the FW file.")
+        log.error("Cannot find firmware file!")
         return ERR_FAIL
 
     def handle(self):
         cmd = self.request.recv(MAX_CMD_SZ)
-        log.info(f"{self.client_address[0]} wrote: {cmd}")
-        action = cmd.decode("utf-8")
-        log.debug(f'load {action}')
+        log.info(f"Client {self.client_address[0]} wrote: {cmd}")
+
         ret = ERR_FAIL
 
+        action = cmd.decode('utf-8')
         if action == CMD_DOWNLOAD:
             self.request.sendall(cmd)
             ret = self.do_download()
         else:
-            log.error("incorrect load communitcation!")
+            log.error("Incorrect communication from client to firmware loader!")
             return
 
         if not ret:
             self.request.sendall("success".encode('utf-8'))
-            log.info("Firmware well received. Ready to download.")
+            log.info("Received firmware")
         else:
             self.request.sendall("failed".encode('utf-8'))
-            log.error("Receive firmware failed.")
+            log.error("Firmware receive failed!")
 
 class adsp_log_handler(socketserver.BaseRequestHandler):
     """
-    The log handler class for grabbing output messages of server.
+    Log handler class
     """
 
     def handle(self):
         cmd = self.request.recv(MAX_CMD_SZ)
-        log.info(f"{self.client_address[0]} wrote: {cmd}")
         action = cmd.decode("utf-8")
-        log.debug(f'monitor {action}')
+
+        log.info(f"Client {self.client_address[0]} wrote: {cmd}")
 
         if action == CMD_LOG_START:
             self.request.sendall(cmd)
         else:
-            log.error("incorrect monitor communitcation!")
+            log.error("Incorrect communication from client to logger!")
 
-        log.info("wait for FW ready...")
+        log.debug("Waiting for loader to finish downloading firmware...")
         while not runner.is_fw_ready():
             if not self.is_connection_alive():
                 return
 
             time.sleep(1)
 
-        log.info("FW is ready...")
-
         with subprocess.Popen(runner.get_script(), stdout=subprocess.PIPE) as proc:
-            # Thread for monitoring the conntection
+            log.info(f"Attaching log monitor to firmware load process {proc.pid}")
+            # Thread for monitoring the connection
             t = threading.Thread(target=self.check_connection, args=(proc,))
             t.start()
 
@@ -154,26 +152,26 @@ class adsp_log_handler(socketserver.BaseRequestHandler):
                     self.request.sendall(out)
                     ret = proc.poll()
                     if ret:
-                        log.info(f"retrun code: {ret}")
+                        log.info(f"return code: {ret}")
                         break
 
                 except (BrokenPipeError, ConnectionResetError):
-                    log.info("Client is disconnect.")
+                    log.debug("Log monitor disconnected")
                     break
 
             t.join()
 
-        log.info("service complete.")
+        log.info("Firmware load and run with log capture complete")
 
     def finish(self):
         runner.cleanup()
-        log.info("Wait for next service...")
+        log.info("Waiting for next request...")
 
     def is_connection_alive(self):
         try:
             self.request.sendall(b'\x00')
         except (BrokenPipeError, ConnectionResetError):
-            log.info("Client is disconnect.")
+            log.debug("Client disconnected")
             return False
 
         return True
@@ -183,15 +181,15 @@ class adsp_log_handler(socketserver.BaseRequestHandler):
         # the first 10 secs.
         time.sleep(10)
 
-        log.info("Checking result...")
+        log.info("Checking connection with client...")
         while True:
             if not self.is_connection_alive():
-                log.info(f"Do kill {proc.pid}")
+                log.info(f"Client dropped connection, killing log monitor process {proc.pid}")
 
                 try:
                     proc.kill()
                 except PermissionError:
-                    log.info("cannot kill proc due to it start with sudo...")
+                    log.info("Cannot kill process started with sudo, killing as root")
                     os.system(f"sudo kill -9 {proc.pid} ")
                 return
 
@@ -213,7 +211,7 @@ class device_runner():
 
     def is_fw_ready(self):
         self.fw_file = self.fw_queue.get()
-        log.info(f"Current FW is {self.fw_file}")
+        log.debug(f"Current firmware is {self.fw_file}")
 
         return bool(self.fw_file)
 
@@ -237,7 +235,7 @@ class device_runner():
             for param in self.board.params:
                 self.script.append(param)
 
-        log.info(f'run script: {self.script}')
+        log.info(f'Now running firmware load script {self.script}')
         return self.script
 
 class board_config():
@@ -249,8 +247,8 @@ class board_config():
         if not self.load_cmd:
             self.load_cmd = "./cavstool.py"
 
-        if not self.load_cmd or not os.path.exists(self.load_cmd):
-            log.error(f'Cannot find load cmd {self.load_cmd}.')
+        if not os.path.exists(self.load_cmd):
+            log.error(f'Could not set script to load firmware as path {self.load_cmd} is invalid.')
             sys.exit(1)
 
     def get_cmd(self):
@@ -260,7 +258,7 @@ class board_config():
         return self.params
 
 
-ap = argparse.ArgumentParser(description="RemoteHW service tool")
+ap = argparse.ArgumentParser(description="Remote HW service tool")
 ap.add_argument("-q", "--quiet", action="store_true",
                 help="No loader output, just DSP logging")
 ap.add_argument("-v", "--verbose", action="store_true",
@@ -268,11 +266,11 @@ ap.add_argument("-v", "--verbose", action="store_true",
 ap.add_argument("-s", "--server-addr",
                 help="Specify the only IP address the log server will LISTEN on")
 ap.add_argument("-p", "--log-port",
-                help="Specify the PORT that the log server to active")
+                help="Specify the PORT that the log server will be active on")
 ap.add_argument("-r", "--req-port",
-                help="Specify the PORT that the request server to active")
+                help="Specify the PORT that the request server will be active on")
 ap.add_argument("-c", "--load-cmd",
-                help="Specify loading command of the board")
+                help="Specify command to load firmware onto the board")
 
 args = ap.parse_args()
 
@@ -296,9 +294,6 @@ if args.log_port:
 if args.req_port:
     PORT_REQ = int(args.req_port)
 
-log.info(f"Serve on LOG PORT: {PORT_LOG} REQ PORT: {PORT_REQ}")
-
-
 if __name__ == "__main__":
 
     # Do board configuration setup
@@ -309,14 +304,14 @@ if __name__ == "__main__":
     req_server = socketserver.TCPServer((HOST, PORT_REQ), adsp_request_handler)
     req_t = threading.Thread(target=req_server.serve_forever, daemon=True)
 
-    # Activate the log service which output board's execution result
+    # Activate the log service that outputs the board's execution result
     log_server = socketserver.TCPServer((HOST, PORT_LOG), adsp_log_handler)
     log_t = threading.Thread(target=log_server.serve_forever, daemon=True)
 
     try:
-        log.info("Req server start...")
+        log.info(f"Firmware load server starting on port {PORT_REQ}...")
         req_t.start()
-        log.info("Log server start...")
+        log.info(f"Log monitor server starting on port {PORT_LOG}...")
         log_t.start()
         req_t.join()
         log_t.join()

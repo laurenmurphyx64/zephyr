@@ -14,7 +14,8 @@ import argparse
 
 start_output = True
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO,
+    format='%(levelname)s: %(name)s: %(message)s')
 log = logging.getLogger("cavs-fw")
 
 PAGESZ = 4096
@@ -42,7 +43,7 @@ class HDAStream:
     def __init__(self, stream_id: int):
         self.stream_id = stream_id
         self.base = hdamem + 0x0080 + (stream_id * 0x20)
-        log.info(f"Mapping registers for hda stream {self.stream_id} at base {self.base:x}")
+        log.info(f"Mapping registers for HDA stream {self.stream_id} at base {self.base:x}")
 
         self.hda = Regs(hdamem)
         self.hda.GCAP    = 0x0000
@@ -299,7 +300,7 @@ def map_phys_mem(stream_id):
     hugef = open(hugef_name, "w+")
     hugef.truncate(HUGEPAGESZ)
     mem = mmap.mmap(hugef.fileno(), HUGEPAGESZ)
-    log.info("type of mem is %s", str(type(mem)))
+    log.info("Type of mem is %s", str(type(mem)))
     global_mmaps.append(mem)
     os.unlink(hugef_name)
 
@@ -377,7 +378,7 @@ def load_firmware(fw_file):
     hda.GCTL = 1
     while not hda.GCTL & 1: pass
 
-    log.info(f"Stalling and Resetting DSP cores, ADSPCS = 0x{dsp.ADSPCS:x}")
+    log.info(f"Stalling and resetting DSP cores, ADSPCS = 0x{dsp.ADSPCS:x}")
     dsp.ADSPCS |= mask(CSTALL)
     dsp.ADSPCS |= mask(CRST)
     while (dsp.ADSPCS & mask(CRST)) == 0: pass

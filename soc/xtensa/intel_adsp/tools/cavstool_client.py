@@ -25,12 +25,12 @@ CMD_DOWNLOAD = "download"
 MAX_CMD_SZ = 16
 
 # Define the header format and size for
-# transmiting the firmware
+# transmitting the firmware
 PACKET_HEADER_FORMAT_FW = 'I 42s 32s'
 
-logging.basicConfig()
+logging.basicConfig(level=logging.INFO,
+    format='%(levelname)s: %(name)s: %(message)s')
 log = logging.getLogger("cavs-client")
-log.setLevel(logging.INFO)
 
 class cavstool_client():
     def __init__(self, host, port, args):
@@ -46,16 +46,16 @@ class cavstool_client():
             self.cmd = cmd
             self.sock.connect((self.host, self.port))
             self.sock.sendall(cmd.encode("utf-8"))
-            log.info(f"Sent:     {cmd}")
+            log.debug(f"Sent:     {cmd}")
             ack = str(self.sock.recv(MAX_CMD_SZ), "utf-8")
-            log.info(f"Receive: {ack}")
+            log.debug(f"Received: {ack}")
 
             if ack == CMD_LOG_START:
                 self.monitor_log()
             elif ack == CMD_DOWNLOAD:
                 self.run()
             else:
-                log.error(f"Receive incorrect msg:{ack} expect:{cmd}")
+                log.error(f"Received incorrect message: {ack}, expected: {cmd}")
 
     def uploading(self, filename):
         # Send the FW to server
@@ -68,34 +68,34 @@ class cavstool_client():
         # The header by convention includes:
         # size(4), filename(42), MD5(32)
         values = (fsize, fname.encode('utf-8'), md5_tx.encode('utf-8'))
-        log.info(f'filename:{fname}, size:{fsize}, md5:{md5_tx}')
+        log.info(f'Firmware header: {{ filename: {fname}, size: {fsize}, md5: {md5_tx} }}')
 
         s = struct.Struct(PACKET_HEADER_FORMAT_FW)
         header_data = s.pack(*values)
         header_size = s.size
-        log.info(f'header size: {header_size}')
+        log.info(f'Header size: {header_size} bytes')
 
         with open(filename,'rb') as f:
-            log.info(f'Sending...')
-
+            log.debug(f'Sending firmware header...')
             total = self.sock.send(header_data)
+            log.info(f'Sending firmware...')
             total += self.sock.sendfile(f)
 
-            log.info(f"Done Sending ({total}).")
+            log.debug(f"Sent {total} bytes total")
 
             rck = self.sock.recv(MAX_CMD_SZ).decode("utf-8")
-            log.info(f"RCK ({rck}).")
+            log.info(f"RCK ({rck})")
             if not rck == "success":
                 global RET
                 RET = -1
-                log.error(f"Firmware uploading failed")
+                log.error(f"Firmware upload failed!")
 
     def run(self):
         filename = str(self.args.fw_file)
         self.uploading(filename)
 
     def monitor_log(self):
-        log.info(f"Start to monitor log output...")
+        log.debug(f"Connecting to log monitor...")
         while True:
             # Receive data from the server and print out
             receive_log = str(self.sock.recv(BUF_SIZE), "utf-8").replace('\x00','')
@@ -110,8 +110,7 @@ class cavstool_client():
 
 def main():
     if args.log_only:
-        log.info("Monitor process")
-
+        log.info(f"Receiving logs from host {HOST} with port {PORT}...")
         try:
             client = cavstool_client(HOST, PORT, args)
             client.send_cmd(CMD_LOG_START)
@@ -119,11 +118,11 @@ def main():
             pass
 
     else:
-        log.info("Uploading process")
+        log.info(f"Uploading firmware to host {HOST} with port {PORT}...")
         client = cavstool_client(HOST, PORT, args)
         client.send_cmd(CMD_DOWNLOAD)
 
-ap = argparse.ArgumentParser(description="DSP loader/logger client tool")
+ap = argparse.ArgumentParser(description="ADSP loader/logger client tool")
 ap.add_argument("-q", "--quiet", action="store_true",
                 help="No loader output, just DSP logging")
 ap.add_argument("-l", "--log-only", action="store_true",
@@ -159,8 +158,6 @@ if args.server_addr:
             PORT = PORT_LOG
         else:
             PORT = PORT_REQ
-
-log.info(f"REMOTE HOST: {HOST} PORT: {PORT}")
 
 if __name__ == "__main__":
     main()
