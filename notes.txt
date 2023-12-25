@@ -1,0 +1,4 @@
+12/25
+=====
+/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -I/home/lauren/zephyrproject/zephyr/include -c -o build/hello_world.elf tests/subsys/llext/hello_world/hello_world.c -DCONFIG_ARM64
+

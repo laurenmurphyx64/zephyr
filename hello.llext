@@ -1,0 +1,68 @@
+build/hello_world/hello_world.llext:     file format elf32-littlearm
+build/hello_world/hello_world.llext
+architecture: armv4t, flags 0x00000011:
+HAS_RELOC, HAS_SYMS
+start address 0x00000000
+private flags = 0x5000000: [Version5 EABI]
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         00000038  00000000  00000000  00000034  2**2
+                  CONTENTS, ALLOC, LOAD, RELOC, READONLY, CODE
+  1 .data         00000000  00000000  00000000  0000006c  2**0
+                  CONTENTS, ALLOC, LOAD, DATA
+  2 .bss          00000000  00000000  00000000  0000006c  2**0
+                  ALLOC
+  3 .rodata       00000034  00000000  00000000  0000006c  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  4 .exported_sym 00000008  00000000  00000000  000000a0  2**2
+                  CONTENTS, ALLOC, LOAD, RELOC, DATA
+  5 .comment      00000021  00000000  00000000  000000a8  2**0
+                  CONTENTS, READONLY
+  6 .ARM.attributes 0000002a  00000000  00000000  000000c9  2**0
+                  CONTENTS, READONLY
+SYMBOL TABLE:
+00000000 l    df *ABS*	00000000 hello_world.c
+00000000 l    d  .text	00000000 .text
+00000000 l    d  .data	00000000 .data
+00000000 l    d  .bss	00000000 .bss
+00000000 l    d  .rodata	00000000 .rodata
+00000000 l     O .rodata	00000004 number
+00000000 l    d  .exported_sym	00000000 .exported_sym
+00000000 l    d  .comment	00000000 .comment
+00000000 l    d  .ARM.attributes	00000000 .ARM.attributes
+00000000 g     F .text	00000034 hello_world
+00000000         *UND*	00000000 printk
+00000000 g     O .exported_sym	00000008 symbol_hello_world
+
+
+
+Disassembly of section .text:
+
+00000000 <hello_world>:
+   0:	b580      	push	{r7, lr}
+   2:	af00      	add	r7, sp, #0
+   4:	4b08      	ldr	r3, [pc, #32]	; (28 <hello_world+0x28>)
+   6:	0018      	movs	r0, r3
+   8:	4b08      	ldr	r3, [pc, #32]	; (2c <hello_world+0x2c>)
+   a:	f000 f813 	bl	34 <hello_world+0x34>
+   e:	222a      	movs	r2, #42	; 0x2a
+  10:	4b07      	ldr	r3, [pc, #28]	; (30 <hello_world+0x30>)
+  12:	0011      	movs	r1, r2
+  14:	0018      	movs	r0, r3
+  16:	4b05      	ldr	r3, [pc, #20]	; (2c <hello_world+0x2c>)
+  18:	f000 f80c 	bl	34 <hello_world+0x34>
+  1c:	46c0      	nop			; (mov r8, r8)
+  1e:	46bd      	mov	sp, r7
+  20:	bc80      	pop	{r7}
+  22:	bc01      	pop	{r0}
+  24:	4700      	bx	r0
+  26:	46c0      	nop			; (mov r8, r8)
+  28:	00000004 	.word	0x00000004
+			28: R_ARM_ABS32	.rodata
+  2c:	00000000 	.word	0x00000000
+			2c: R_ARM_ABS32	printk
+  30:	00000014 	.word	0x00000014
+			30: R_ARM_ABS32	.rodata
+  34:	4718      	bx	r3
+  36:	46c0      	nop			; (mov r8, r8)
