@@ -1,4 +1,885 @@
+Questions
+========
+*** Why extern printk
+*** Why is CONFIG in the symbol table for ELF
+
+  2788: 20000134     0 NOTYPE  GLOBAL DEFAULT   21 _k_sem_list_start
+  2789: 00000001     0 OBJECT  GLOBAL DEFAULT  ABS CONFIG_HAS_SEGGER_RTT
+  2790: 00009a71    72 FUNC    GLOBAL DEFAULT    2 z_shell_op_cursor_move
+  2791: 00000001     0 OBJECT  GLOBAL DEFAULT  ABS CONFIG_ZEPHYR_LIBMETAL_MODULE
+*** Why llext_loader and buf_loader separate
+*** Why no CPU option -mcpu or -march
+
 12/25
 =====
-/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -I/home/lauren/zephyrproject/zephyr/include -c -o build/hello_world.elf tests/subsys/llext/hello_world/hello_world.c -DCONFIG_ARM64
+*** /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -I/home/lauren/zephyrproject/zephyr/include -c -o build/hello_world.elf tests/subsys/llext/hello_world/hello_world.c -DCONFIG_ARM64
 
+12/26
+=====
+*** CONFIG_ARM_MPU=n
+
+12/27
+=====
+*** Philosophers example
+*** Linking two object files into one https://stackoverflow.com/questions/18182176/compile-multiple-c-source-fles-into-a-unique-object-file
+    -I ${PROJECT_BINARY_DIR}/../zephyr/include/generated
+
+*** Realized syscall_list.h is generated while building test app, which necessarily happens after extension so it can include it (?)
+	/home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include/zephyr/syscall.h:11:10: fatal error: syscall_list.h: No such file or directory
+   11 | #include <syscall_list.h>
+
+	(.venv) lauren@laurenmu-MOBL4:~/zephyrproject/zephyr$ west -vv build -p -b frdm_k64f tests/subsys/llext
+	west.manifest: DEBUG: loading /home/lauren/zephyrproject/zephyr/west.yml
+	west.manifest: DEBUG: resolving self import submanifests
+	...
+	pristine: always auto_pristine: False
+	-- west build: making build dir /home/lauren/zephyrproject/zephyr/build pristine
+	cmake version 3.22.1 is OK; minimum version is 3.13.1
+	Running CMake: /usr/bin/cmake -DBINARY_DIR=/home/lauren/zephyrproject/zephyr/build -DSOURCE_DIR=/home/lauren/zephyrproject/zephyr/tests/subsys/llext -P /home/lauren/zephyrproject/zephyr/cmake/pristine.cmake
+	-- west build: generating a build system
+	cmake version 3.22.1 is OK; minimum version is 3.13.1
+	Running CMake: /usr/bin/cmake -DWEST_PYTHON=/home/lauren/zephyrproject/.venv/bin/python3 -B/home/lauren/zephyrproject/zephyr/build -GNinja -DBOARD=frdm_k64f -S/home/lauren/zephyrproject/zephyr/tests/subsys/llext
+	Loading Zephyr default modules (Zephyr base).
+	-- Application: /home/lauren/zephyrproject/zephyr/tests/subsys/llext
+	-- CMake version: 3.22.1
+	-- Found Python3: /home/lauren/zephyrproject/.venv/bin/python3 (found suitable version "3.10.12", minimum required is "3.8") found components: Interpreter 
+	-- Cache files will be written to: /home/lauren/.cache/zephyr
+	-- Zephyr version: 3.5.99 (/home/lauren/zephyrproject/zephyr)
+	-- Found west (found suitable version "1.2.0", minimum required is "0.14.0")
+	-- Board: frdm_k64f
+	-- Found host-tools: zephyr 0.16.4 (/home/lauren/zephyr-sdk-0.16.4)
+	-- Found toolchain: zephyr 0.16.4 (/home/lauren/zephyr-sdk-0.16.4)
+	-- Found Dtc: /home/lauren/zephyr-sdk-0.16.4/sysroots/x86_64-pokysdk-linux/usr/bin/dtc (found suitable version "1.6.0", minimum required is "1.4.6") 
+	-- Found BOARD.dts: /home/lauren/zephyrproject/zephyr/boards/arm/frdm_k64f/frdm_k64f.dts
+	-- Generated zephyr.dts: /home/lauren/zephyrproject/zephyr/build/zephyr/zephyr.dts
+	-- Generated devicetree_generated.h: /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/devicetree_generated.h
+	-- Including generated dts.cmake file: /home/lauren/zephyrproject/zephyr/build/zephyr/dts.cmake
+
+	warning: HW_STACK_PROTECTION (defined at soc/arm/nxp_s32/s32k1/Kconfig.defconfig.series:27,
+	arch/Kconfig:260) was assigned the value 'y' but got the value 'n'. Check these unsatisfied
+	dependencies: (SOC_SERIES_S32K1XX || ARCH_HAS_STACK_PROTECTION) (=n). See
+	http://docs.zephyrproject.org/latest/kconfig.html#CONFIG_HW_STACK_PROTECTION and/or look up
+	HW_STACK_PROTECTION in the menuconfig/guiconfig interface. The Application Development Primer,
+	Setting Configuration Values, and Kconfig - Tips and Best Practices sections of the manual might be
+	helpful too.
+
+	Parsing /home/lauren/zephyrproject/zephyr/Kconfig
+	Loaded configuration '/home/lauren/zephyrproject/zephyr/boards/arm/frdm_k64f/frdm_k64f_defconfig'
+	Merged configuration '/home/lauren/zephyrproject/zephyr/tests/subsys/llext/prj.conf'
+	Configuration saved to '/home/lauren/zephyrproject/zephyr/build/zephyr/.config'
+	Kconfig header saved to '/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h'
+	-- Found GnuLd: /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/../lib/gcc/arm-zephyr-eabi/12.2.0/../../../../arm-zephyr-eabi/bin/ld.bfd (found version "2.38") 
+	-- The C compiler identification is GNU 12.2.0
+	-- The CXX compiler identification is GNU 12.2.0
+	-- The ASM compiler identification is GNU
+	-- Found assembler: /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc
+	Load components for MK64F12:
+	driver_common component is included.
+	driver_reset component is included.
+	device_CMSIS component is included.
+	CMSIS_Include_core_cm component is included.
+	device_system component is included.
+	driver_uart component is included.
+	driver_port component is included.
+	driver_sysmpu component is included.
+	-- Using ccache: /usr/bin/ccache
+	Loading Zephyr default modules (Zephyr base (cached)).
+	-- Configuring done
+	-- Generating done
+	-- Build files have been written to: /home/lauren/zephyrproject/zephyr/build
+	-- west build: building application
+	cmake version 3.22.1 is OK; minimum version is 3.13.1
+	Running CMake: /usr/bin/cmake --build /home/lauren/zephyrproject/zephyr/build -- -v
+	[1/138] cd /home/lauren/zephyrproject/zephyr/build/zephyr && /usr/bin/cmake -E echo
+
+	[2/138] cd /home/lauren/zephyrproject/zephyr/build/zephyr && /home/lauren/zephyrproject/.venv/bin/python3 /home/lauren/zephyrproject/zephyr/scripts/build/subfolder_list.py --directory /home/lauren/zephyrproject/zephyr/include --out-file /home/lauren/zephyrproject/zephyr/build/zephyr/misc/generated/syscalls_subdirs.txt --trigger-file /home/lauren/zephyrproject/zephyr/build/zephyr/misc/generated/syscalls_subdirs.trigger --create-links /home/lauren/zephyrproject/zephyr/build/zephyr/misc/generated/syscalls_links
+	[3/138] cd /home/lauren/zephyrproject/zephyr/build/zephyr && /usr/bin/cmake -DZEPHYR_BASE=/home/lauren/zephyrproject/zephyr -DOUT_FILE=/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/version.h -DVERSION_TYPE=KERNEL -DVERSION_FILE=/home/lauren/zephyrproject/zephyr/VERSION -DKERNEL_VERSION_CUSTOMIZATION="" -P /home/lauren/zephyrproject/zephyr/cmake/gen_version_h.cmake
+	-- Zephyr version: 3.5.99 (/home/lauren/zephyrproject/zephyr), build: zephyr-v3.5.0-3468-g7ad25225b3c3
+	[4/138] cd /home/lauren/zephyrproject/zephyr/build/philosophers && 
+
+
+
+	/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include -I /home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/syscall_list.h -imacros/home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/autoconf.h -o /home/lauren/zephyrproject/zephyr/build/philosophers/main.o /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/main.c
+
+
+
+
+	&& /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include -I /home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/syscall_list.h -imacros/home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/autoconf.h -o /home/lauren/zephyrproject/zephyr/build/philosophers/phil_obj_abstract.o /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/phil_obj_abstract.c
+	
+	
+	
+	
+	&& /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-ar cr /home/lauren/zephyrproject/zephyr/build/philosophers/philosophers.llext /home/lauren/zephyrproject/zephyr/build/philosophers/phil_obj_abstract.o /home/lauren/zephyrproject/zephyr/build/philosophers/main.o
+
+
+
+	FAILED: philosophers/philosophers.llext /home/lauren/zephyrproject/zephyr/build/philosophers/philosophers.llext 
+	cd /home/lauren/zephyrproject/zephyr/build/philosophers && /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include -I /home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/syscall_list.h -imacros/home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/autoconf.h -o /home/lauren/zephyrproject/zephyr/build/philosophers/main.o /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/main.c && /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include -I /home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/syscall_list.h -imacros/home/lauren/zephyrproject/zephyr/build/philosophers/../zephyr/include/generated/autoconf.h -o /home/lauren/zephyrproject/zephyr/build/philosophers/phil_obj_abstract.o /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/phil_obj_abstract.c && /home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-ar cr /home/lauren/zephyrproject/zephyr/build/philosophers/philosophers.llext /home/lauren/zephyrproject/zephyr/build/philosophers/phil_obj_abstract.o /home/lauren/zephyrproject/zephyr/build/philosophers/main.o
+	In file included from /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include/zephyr/kernel_includes.h:35,
+					from /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include/zephyr/kernel.h:17,
+					from /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/main.c:40:
+	/home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/../../../../include/zephyr/syscall.h:11:10: fatal error: syscall_list.h: No such file or directory
+	11 | #include <syscall_list.h>
+		|          ^~~~~~~~~~~~~~~~
+	compilation terminated.
+	[5/138] cd /home/lauren/zephyrproject/zephyr/build/zephyr && /home/lauren/zephyrproject/.venv/bin/python3 /home/lauren/zephyrproject/zephyr/scripts/build/parse_syscalls.py --scan /home/lauren/zephyrproject/zephyr/include --scan /home/lauren/zephyrproject/zephyr/drivers --scan /home/lauren/zephyrproject/zephyr/subsys/net --include /home/lauren/zephyrproject/zephyr/subsys/testsuite/ztest/include --json-file /home/lauren/zephyrproject/zephyr/build/zephyr/misc/generated/syscalls.json --tag-struct-file /home/lauren/zephyrproject/zephyr/build/zephyr/misc/generated/struct_tags.json --file-list /home/lauren/zephyrproject/zephyr/build/zephyr/misc/generated/syscalls_file_list.txt
+	ninja: build stopped: subcommand failed.
+	FATAL ERROR: command exited with status 1: /usr/bin/cmake --build /home/lauren/zephyrproject/zephyr/build -- -v
+
+*** Realized phil_obj_abstract is not a C file
+
+  COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS} -c
+		-I ${PROJECT_SOURCE_DIR}/../../../../include
+		-imacros${PROJECT_BINARY_DIR}/../zephyr/include/generated/autoconf.h
+		-o ${PROJECT_BINARY_DIR}/phil_obj_abstract.o
+		${PROJECT_SOURCE_DIR}/phil_obj_abstract.c
+  COMMAND ${CMAKE_AR} cr
+    ${PROJECT_BINARY_DIR}/philosophers.llext
+		${PROJECT_BINARY_DIR}/phil_obj_abstract.o
+		${PROJECT_BINARY_DIR}/main.o
+    )
+
+*** Compiled philosophers after the fact with header from test app and put into sample app
+
+	/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/include -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated -imacros/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h -o philosophers.llext /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/main.c
+	cd build
+	xxd -p philosophers.llext | tr -d '\n'
+
+	7f454c4601010100000000000000000001002800010000000000000000000000181400000000000534000000000028000f000e0080b582b000af78603960c046bd4602b080bc01bc004780b582b000af786039603a687b6811001800fff7eaffc046bd4602b080bc01bc0047b0b584b000aff860fb68002b00da00233b60db177b603a687b68910f9d000d4394003a687b6812196b4192185b411000190000f065f801000b001800bd4604b0b0bc02bc084780b500af064b7b441b68fff7feff0200d3581800bd4680bc02bc0847c04614000000b0b500af00f098f802000b0010001900064c0a22002300f0cffa02000b0010001900bd46b0bc04bc1047c0460000000080b500affff7e4ff02000b0013001800bd4680bc02bc0847b0b58cb008aff860b9607a603b603d687c68b968f868ba6bfb6b069207933b6b0493fb6a0393bb6a02937b6a01933b6a00932b002200054c00f09afa03001800bd4604b0b0bc02bc0847c0460000000080b582b000af386079603a687b6810001900054b00f083fa03001800bd4602b080bc02bc0847c0460000000080b582b000af78607b681800044b00f070fac046bd4602b080bc01bc0047c0460000000080b582b000af78607b681800044b00f05efa03001800bd4602b080bc02bc08470000000080b582b000af786039603a687b6811001800054b00f049fa03001800bd4602b080bc02bc0847c0460000000080b500af054b00f03afa02000b0010001900bd4680bc04bc1047c0460000000080b582b000af78607b681800044b00f026fa03001800bd4602b080bc02bc08470000000080b584b000aff8603a607b603a687b68f9680800044900f00ffa03001800bd4604b080bc02bc08470000000080b582b000af78607b681800044b00f0fef903001800bd4602b080bc02bc08470000000080b582b000af78607b68591c054b01221800054b00f0e9f9c046bd4602b080bc01bc0047000000000000000090b589b002aff860b9607a60fff7ebfe03001800fff76cff03007b61fb681800fff7d8ff7b69002b01da1a4a00e01a4a7b69002b01da194b00e0194bfc681948796900912100184c00f0baf97b68002b0ed07a68fa239b009a4201da104b00e00e4b7a68b86819000f4b00f0a8f906e00a4abb68110018000b4b00f0a0f90b4b1800094b00f09bf9c046bd4607b090bc01bc00470c0000001000000014000000180000001c000000000000003800000080b584b000af78603960fff7bdfe02000c4b6421100000f07af903001a007b68013353431a001f231340fb60fb685a1c3b685343bb60bb681800bd4604b080bc02bc08470000000080b582b000af78607b68053b5a4253411b061b0e1800bd4602b080bc02bc084780b588b000aff860b9607a60fb687b617b691800fff7e4ff031e08d02f4b1b68fb612e4b7a699200d358bb610ae02b4b7a699200d358fb617b695a1c274b9200d358bb6126497b6900221800fff74cff01225242d317f9690800fff707ff21497b6900221800fff73fff01225242d317b9690800fff7fafe7b6919211800fff78bff03003b613a6917497b691800fff72bff3b691800fff7f7fdbb691800fff7fbfe12497b6900221800fff71dfffb691800fff7f1fe7b6919211800fff76cff03003b613a690a497b691800fff70cff3b691800fff7d8fdb4e7c046000000003c000000540000006c000000840000009c00000080b582b000af78607b680322d31a1800bd4602b080bc02bc084780b582b000af00237b6009e00a4b7a689200d3581800fff790fe7b6801337b607b68052bf2ddc046c046bd4602b080bc01bc0047c04600000000f0b593b008af00237b6261e07b6a1800fff7ccff03003b627b6aa8225a43314bd0187b6ada02304bd418796a01225242d3172e4e80252d0106920793042304933b6a03930023029300230193009133002a002100fff7ccfd7b6a254a38002021244c00f07df87b6aa8225a431d4bd3183a0011001800fff71dfe1f4b7a6a9200d0587b6aa8225a43164bd3181900fff746fd7b6a5a1c194b0621100000f05ff80b001a00144b9200d0587b6aa8225a430c4bd3181900fff732fd7b6aa8225a43084bd3181800fff7d1fd7b6a01337b627b6a052b9addc046c046bd460bb0f0bc01bc0047780000000000000000000000b400000000000000000000000000000080b500af054a0649064b1800064b00f026f8c046bd4680bc01bc0047c4000000cc000000d40000000000000080b500affff7e6ff074b00211800074b00f00ff8fff741fffff75cff00231800bd4680bc02bc08478813000000000000084718472047c0460000000014000000280000003c00000050000000640000001b5b25643b25644800000000430000005000000000000000200000005068696c6f736f70686572202564205b25733a257325645d200000000a000000202020202020205354415256494e47202020202020200000202020484f4c44494e47204f4e4520464f524b20202000002020454154494e4720205b2025732564206d73205d20000020202044524f50504544204f4e4520464f524b2020200000205448494e4b494e47205b2025732564206d73205d2000005068696c6f736f7068657220256400006d7574657865730064796e616d6963001b5b324a1b5b31353b314844656d6f204465736372697074696f6e0a2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d0a416e20696d706c656d656e746174696f6e206f66206120736f6c7574696f6e20746f207468652044696e696e67205068696c6f736f70686572730a70726f626c656d20286120636c6173736963206d756c74692d7468726561642073796e6368726f6e697a6174696f6e2070726f626c656d292e0a5468697320706172746963756c617220696d706c656d656e746174696f6e2064656d6f6e7374726174657320746865207573616765206f66206d756c7469706c650a707265656d707469626c6520616e6420636f6f70657261746976652074687265616473206f6620646966666572696e67207072696f7269746965732c2061730a77656c6c20617320257320257320616e642074687265616420736c656570696e672e0a007068696c6f736f7068657273000000001c02000000000000004743433a20285a65706879722053444b20302e31362e34292031322e322e30004129000000616561626900011f000000053454000602080109011204140115011703180119011a011e0600000000000000000000000000000000000100000000000000000000000400f1ff00000000000000000000000003000100000000000000000000000000030003000000000000000000000000000300050008000000010000001600000002000100250000000000000000000000000001000f000000170000002200000002000100280000003900000046000000020001003f010000390100002c00000002000100310000007f00000022000000020001003f0000009c000000000000000000010025000000a0000000000000000000010042000000a100000030000000020001009a010000d901000020000000020001003f000000cc000000000000000000010025000000d000000000000000000001004f000000d1000000180000000200010028010000e900000050000000020001003f000000340100000000000000000100250000003801000000000000000001003f000000600100000000000000000100250000006401000000000000000001004e0100006501000024000000020001003f00000084010000000000000000010025000000880100000000000000000100640100008901000024000000020001003f000000a8010000000000000000010025000000ac010000000000000000010081010000ad0100002c000000020001003f000000d4010000000000000000010025000000d801000000000000000001003f000000f4010000000000000000010025000000f80100000000000000000100b0010000f901000024000000020001003f000000180200000000000000000100250000001c0200000000000000000100c40100001d0200002c000000020001003f00000044020000000000000000010025000000480200000000000000000100d80100004902000024000000020001003f0000006802000000000000000001003f0000000000000000000000000005003f0000000000000000000000000003005f000000000000001800000001000300000000000000000000000000030006003f00000000000000000000000000060065000000000000000030000001000600d100000078000000f003000000000500000000000000000000000000030007003f000000000000000000000000000700250000006c02000000000000000001006c0000006d0200002c000000020001003f000000900200000000000000000100250000009802000000000000000001007f00000099020000b0000000020001003f0000002c030000000000000000010025000000480300000000000000000100900000004903000048000000020001003f0000008c030000000000000000010025000000900300000000000000000100a10000009103000020000000020001003f0000008c040000000000000000010025000000a40400000000000000000100b5000000a50400001a00000002000100be000000bf0400003a000000020001003f000000f4040000000000000000010025000000f80400000000000000000100cb000000f904000000010000020001003f000000dc050000000000000000010025000000f80500000000000000000100d9000000f90500002c000000020001003f000000140600000000000000000100250000002406000000000000000001003f0000004c0600000000000000000100000000000000000000000000030008003f0000000000000000000000000008002500000054060000000000000000010000000000000000000000000003000a0000000000000000000000000003000b00f200000000000000000000001000000002010000000000000000000016000000100100000000000000000000100000002101000000000000000000001000000038010000000000000000000010000000470100000000000000000000100000005d0100000000000000000000100000007a01000000000000000000001000000093010000000000000000000010000000a9010000000000000000000010000000bd010000000000000000000010000000d1010000000000000000000010000000e7010000000000007800000011000500f1010000000000000000000010000000f8010000000000000000000010000000a9000000b1030000f40000001200010006020000000000000000000010000000160200000000000000000000100000003d0200002506000030000000120001001f02000000000000000000001000000036020000000000000800000011000800006d61696e2e63007a5f696d706c5f6b5f6f626a6563745f6163636573735f6772616e74002474006b5f6d736c656570006b5f63757272656e745f676574002464006b5f757074696d655f676574006b5f757074696d655f6765745f333200666f726b7300737461636b73007365745f7068696c5f73746174655f706f73007072696e745f7068696c5f7374617465006765745f72616e646f6d5f64656c61790069735f6c6173745f7068696c6f736f70686572006e65775f7072696f00696e69745f6f626a656374730073746172745f7468726561647300646973706c61795f64656d6f5f6465736372697074696f6e005f5f61656162695f726561645f7470007a5f746c735f63757272656e74005f5f61656162695f756c6469766d6f64007a5f696d706c5f6b5f7468726561645f637265617465007a5f696d706c5f6b5f736c656570007a5f696d706c5f6b5f7468726561645f7374617274007a5f696d706c5f6b5f7468726561645f7072696f726974795f676574007a5f696d706c5f6b5f7468726561645f6e616d655f736574007a5f696d706c5f6b5f757074696d655f7469636b73007a5f696d706c5f6b5f6d757465785f696e6974007a5f696d706c5f6b5f6d757465785f6c6f636b007a5f696d706c5f6b5f6d757465785f756e6c6f636b00666f726b5f6f626a73007072696e746b005f5f61656162695f7569646976005f5f61656162695f696469766d6f6400736e7072696e7466006b5f73636865645f74696d655f736c6963655f7365740073796d626f6c5f7068696c6f736f7068657273000000880000000a5000009c0000006b510000cc00000002520000340100000253000060010000025400008401000002550000a801000002560000d401000002570000f401000002580000180200000259000044020000025a000068020000025b0000900200000231000094020000025d00002c030000023100003003000002310000340300000231000038030000023100003c0300000231000040030000025d000044030000023100008c030000025e00008c040000020300009004000002310000940400000231000098040000023100009c04000002310000a004000002310000f404000002030000dc05000002040000e0050000022d0000e4050000025f0000e805000002310000ec05000002610000f005000002030000f405000002600000140600000231000018060000023100001c0600000231000020060000025d0000500600000263000000000000025c000004000000025c000008000000025c00000c000000025c000010000000025c000014000000025c000000000000023100000400000002620000002e73796d746162002e737472746162002e7368737472746162002e72656c2e74657874002e72656c2e64617461002e627373002e6e6f696e69742e222f686f6d652f6c617572656e2f7a657068797270726f6a6563742f7a65706879722f74657374732f7375627379732f6c6c6578742f7068696c6f736f70686572732f7068696c5f6f626a5f61627374726163742e68222e30002e726f64617461002e72656c2e6578706f727465645f73796d002e636f6d6d656e74002e41524d2e6174747269627574657300000000000000000000000000000000000000000000000000000000000000000000000000000000000000001f000000010000000600000000000000340000005c060000000000000000000004000000000000001b000000090000004000000000000000c4110000480100000c00000001000000040000000800000029000000010000000300000000000000900600001800000000000000000000000400000000000000250000000900000040000000000000000c130000300000000c0000000300000004000000080000002f000000080000000300000000000000a8060000680400000000000000000000080000000000000034000000080000000300000000000000a8060000003000000000000000000000080000000000000096000000010000000200000000000000a80600002902000000000000000000000400000000000000a2000000010000000300000000000000d408000008000000000000000000000004000000000000009e0000000900000040000000000000003c130000100000000c000000080000000400000008000000b0000000010000003000000000000000dc0800002100000000000000000000000100000001000000b9000000030000700000000000000000fd0800002a000000000000000000000001000000000000000100000002000000000000000000000028090000500600000d00000050000000040000001000000009000000030000000000000000000000780f00004a02000000000000000000000100000000000000110000000300000000000000000000004c130000c900000000000000000000000100000000000000
+
+	[00:06:05.501,000] <dbg> llext_shell: cmd_llext_load_hex: hex2bin hex len 11488, llext buf sz 8192, read 5744
+	[00:06:05.511,000] <dbg> llext_shell: cmd_llext_load_hex: 4 byte MAGIC
+										7f 45 4c 46                                      |.ELF             
+	[00:06:05.527,000] <dbg> llext: llext_load: Loading relocatable or shared elf
+	[00:06:05.535,000] <dbg> llext: do_llext_load: Finding ELF tables...
+	[00:06:05.542,000] <dbg> llext: llext_find_tables: section 0 at 1418: name 0, type 0, flags 0, addr 0, size 0
+	[00:06:05.552,000] <dbg> llext: llext_find_tables: section 1 at 1440: name 31, type 1, flags 6, addr 0, size 1628
+	[00:06:05.563,000] <dbg> llext: llext_find_tables: section 2 at 1468: name 27, type 9, flags 40, addr 0, size 328
+	[00:06:05.573,000] <dbg> llext: llext_find_tables: section 3 at 1490: name 41, type 1, flags 3, addr 0, size 24
+	[00:06:05.584,000] <dbg> llext: llext_find_tables: section 4 at 14b8: name 37, type 9, flags 40, addr 0, size 48
+	[00:06:05.594,000] <dbg> llext: llext_find_tables: section 5 at 14e0: name 47, type 8, flags 3, addr 0, size 1128
+	[00:06:05.605,000] <dbg> llext: llext_find_tables: section 6 at 1508: name 52, type 8, flags 3, addr 0, size 12288
+	[00:06:05.616,000] <dbg> llext: llext_find_tables: section 7 at 1530: name 150, type 1, flags 2, addr 0, size 553
+	[00:06:05.627,000] <dbg> llext: llext_find_tables: section 8 at 1558: name 162, type 1, flags 3, addr 0, size 8
+	[00:06:05.637,000] <dbg> llext: llext_find_tables: section 9 at 1580: name 158, type 9, flags 40, addr 0, size 16
+	[00:06:05.648,000] <dbg> llext: llext_find_tables: section 10 at 15a8: name 176, type 1, flags 30, addr 0, size 33
+	[00:06:05.658,000] <dbg> llext: llext_find_tables: section 11 at 15d0: name 185, type 1879048195, flags 0, addr 0, size 42
+	[00:06:05.670,000] <dbg> llext: llext_find_tables: section 12 at 15f8: name 1, type 2, flags 0, addr 0, size 1616
+	[00:06:05.681,000] <dbg> llext: llext_find_tables: symtab at 12
+	[00:06:05.687,000] <dbg> llext: llext_find_tables: section 13 at 1620: name 9, type 3, flags 0, addr 0, size 586
+	[00:06:05.698,000] <dbg> llext: llext_find_tables: strtab at 13
+	[00:06:05.704,000] <dbg> llext: llext_find_tables: section 14 at 1648: name 17, type 3, flags 0, addr 0, size 201
+	[00:06:05.715,000] <dbg> llext: llext_find_tables: shstrtab at 14
+	[00:06:05.721,000] <dbg> llext: do_llext_load: Allocate and copy strings...
+	[00:06:05.728,000] <dbg> llext: do_llext_load: Mapping ELF sections...
+	[00:06:05.735,000] <dbg> llext: llext_map_sections: section 0 name 
+	[00:06:05.742,000] <dbg> llext: llext_map_sections: Not copied section 
+	[00:06:05.749,000] <dbg> llext: llext_map_sections: section 1 name .text
+	[00:06:05.756,000] <dbg> llext: llext_map_sections: section 2 name .rel.text
+	[00:06:05.764,000] <dbg> llext: llext_map_sections: Not copied section .rel.text
+	[00:06:05.771,000] <dbg> llext: llext_map_sections: section 3 name .data
+	[00:06:05.779,000] <dbg> llext: llext_map_sections: section 4 name .rel.data
+	[00:06:05.786,000] <dbg> llext: llext_map_sections: Not copied section .rel.data
+	[00:06:05.794,000] <dbg> llext: llext_map_sections: section 5 name .bss
+	[00:06:05.801,000] <dbg> llext: llext_map_sections: section 6 name .noinit."/home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/phil_obj_a0
+	[00:06:05.816,000] <dbg> llext: llext_map_sections: Not copied section .noinit."/home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/phil_o0
+	[00:06:05.831,000] <dbg> llext: llext_map_sections: section 7 name .rodata
+	[00:06:05.839,000] <dbg> llext: llext_map_sections: section 8 name .exported_sym
+	[00:06:05.847,000] <dbg> llext: llext_map_sections: section 9 name .rel.exported_sym
+	[00:06:05.855,000] <dbg> llext: llext_map_sections: Not copied section .rel.exported_sym
+	[00:06:05.863,000] <dbg> llext: llext_map_sections: section 10 name .comment
+	[00:06:05.871,000] <dbg> llext: llext_map_sections: Not copied section .comment
+	[00:06:05.878,000] <dbg> llext: llext_map_sections: section 11 name .ARM.attributes
+	[00:06:05.886,000] <dbg> llext: llext_map_sections: Not copied section .ARM.attributes
+	[00:06:05.895,000] <dbg> llext: llext_map_sections: section 12 name .symtab
+	[00:06:05.902,000] <dbg> llext: llext_map_sections: Not copied section .symtab
+	[00:06:05.910,000] <dbg> llext: llext_map_sections: section 13 name .strtab
+	[00:06:05.917,000] <dbg> llext: llext_map_sections: Not copied section .strtab
+	[00:06:05.925,000] <dbg> llext: llext_map_sections: section 14 name .shstrtab
+	[00:06:05.932,000] <dbg> llext: llext_map_sections: Not copied section .shstrtab
+	[00:06:05.940,000] <dbg> llext: do_llext_load: Allocate and copy sections...
+	[00:06:05.948,000] <dbg> llext: do_llext_load: Counting exported symbols...
+	[00:06:05.955,000] <dbg> llext: llext_count_export_syms: symbol count 101
+	[00:06:05.962,000] <dbg> llext: llext_count_export_syms: unhandled symbol 1, name main.c, type tag 4, bind 0, sect 65521
+	[00:06:05.974,000] <dbg> llext: llext_count_export_syms: unhandled symbol 2, name , type tag 3, bind 0, sect 1
+	[00:06:05.984,000] <dbg> llext: llext_count_export_syms: unhandled symbol 3, name , type tag 3, bind 0, sect 3
+	[00:06:05.994,000] <dbg> llext: llext_count_export_syms: unhandled symbol 4, name , type tag 3, bind 0, sect 5
+	[00:06:06.005,000] <dbg> llext: llext_count_export_syms: unhandled symbol 5, name z_impl_k_object_access_grant, type tag 2, bind 0, sect 1
+	[00:06:06.018,000] <dbg> llext: llext_count_export_syms: unhandled symbol 6, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.028,000] <dbg> llext: llext_count_export_syms: unhandled symbol 7, name k_object_access_grant, type tag 2, bind 0, sect 1
+	[00:06:06.041,000] <dbg> llext: llext_count_export_syms: unhandled symbol 8, name k_msleep, type tag 2, bind 0, sect 1
+	[00:06:06.052,000] <dbg> llext: llext_count_export_syms: unhandled symbol 9, name k_sleep, type tag 2, bind 0, sect 1
+	[00:06:06.063,000] <dbg> llext: llext_count_export_syms: unhandled symbol 10, name k_current_get, type tag 2, bind 0, sect 1
+	[00:06:06.074,000] <dbg> llext: llext_count_export_syms: unhandled symbol 11, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.085,000] <dbg> llext: llext_count_export_syms: unhandled symbol 12, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.096,000] <dbg> llext: llext_count_export_syms: unhandled symbol 13, name k_uptime_get, type tag 2, bind 0, sect 1
+	[00:06:06.107,000] <dbg> llext: llext_count_export_syms: unhandled symbol 14, name k_uptime_ticks, type tag 2, bind 0, sect 1
+	[00:06:06.119,000] <dbg> llext: llext_count_export_syms: unhandled symbol 15, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.130,000] <dbg> llext: llext_count_export_syms: unhandled symbol 16, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.140,000] <dbg> llext: llext_count_export_syms: unhandled symbol 17, name k_uptime_get_32, type tag 2, bind 0, sect 1
+	[00:06:06.152,000] <dbg> llext: llext_count_export_syms: unhandled symbol 18, name k_thread_create, type tag 2, bind 0, sect 1
+	[00:06:06.164,000] <dbg> llext: llext_count_export_syms: unhandled symbol 19, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.175,000] <dbg> llext: llext_count_export_syms: unhandled symbol 20, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.185,000] <dbg> llext: llext_count_export_syms: unhandled symbol 21, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.196,000] <dbg> llext: llext_count_export_syms: unhandled symbol 22, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.207,000] <dbg> llext: llext_count_export_syms: unhandled symbol 23, name k_thread_start, type tag 2, bind 0, sect 1
+	[00:06:06.218,000] <dbg> llext: llext_count_export_syms: unhandled symbol 24, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.229,000] <dbg> llext: llext_count_export_syms: unhandled symbol 25, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.240,000] <dbg> llext: llext_count_export_syms: unhandled symbol 26, name k_thread_priority_get, type tag 2, bind 0, sect 1
+	[00:06:06.252,000] <dbg> llext: llext_count_export_syms: unhandled symbol 27, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.263,000] <dbg> llext: llext_count_export_syms: unhandled symbol 28, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.273,000] <dbg> llext: llext_count_export_syms: unhandled symbol 29, name k_thread_name_set, type tag 2, bind 0, sect 1
+	[00:06:06.285,000] <dbg> llext: llext_count_export_syms: unhandled symbol 30, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.296,000] <dbg> llext: llext_count_export_syms: unhandled symbol 31, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.307,000] <dbg> llext: llext_count_export_syms: unhandled symbol 32, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.317,000] <dbg> llext: llext_count_export_syms: unhandled symbol 33, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.328,000] <dbg> llext: llext_count_export_syms: unhandled symbol 34, name k_mutex_init, type tag 2, bind 0, sect 1
+	[00:06:06.340,000] <dbg> llext: llext_count_export_syms: unhandled symbol 35, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.350,000] <dbg> llext: llext_count_export_syms: unhandled symbol 36, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.361,000] <dbg> llext: llext_count_export_syms: unhandled symbol 37, name k_mutex_lock, type tag 2, bind 0, sect 1
+	[00:06:06.372,000] <dbg> llext: llext_count_export_syms: unhandled symbol 38, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.383,000] <dbg> llext: llext_count_export_syms: unhandled symbol 39, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.394,000] <dbg> llext: llext_count_export_syms: unhandled symbol 40, name k_mutex_unlock, type tag 2, bind 0, sect 1
+	[00:06:06.406,000] <dbg> llext: llext_count_export_syms: unhandled symbol 41, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.416,000] <dbg> llext: llext_count_export_syms: unhandled symbol 42, name $d, type tag 0, bind 0, sect 5
+	[00:06:06.427,000] <dbg> llext: llext_count_export_syms: unhandled symbol 43, name $d, type tag 0, bind 0, sect 3
+	[00:06:06.438,000] <dbg> llext: llext_count_export_syms: unhandled symbol 44, name forks, type tag 1, bind 0, sect 3
+	[00:06:06.448,000] <dbg> llext: llext_count_export_syms: unhandled symbol 45, name , type tag 3, bind 0, sect 6
+	[00:06:06.459,000] <dbg> llext: llext_count_export_syms: unhandled symbol 46, name $d, type tag 0, bind 0, sect 6
+	[00:06:06.470,000] <dbg> llext: llext_count_export_syms: unhandled symbol 47, name stacks, type tag 1, bind 0, sect 6
+	[00:06:06.481,000] <dbg> llext: llext_count_export_syms: unhandled symbol 48, name threads, type tag 0, bind 0, sect 5
+	[00:06:06.492,000] <dbg> llext: llext_count_export_syms: unhandled symbol 49, name , type tag 3, bind 0, sect 7
+	[00:06:06.502,000] <dbg> llext: llext_count_export_syms: unhandled symbol 50, name $d, type tag 0, bind 0, sect 7
+	[00:06:06.513,000] <dbg> llext: llext_count_export_syms: unhandled symbol 51, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.524,000] <dbg> llext: llext_count_export_syms: unhandled symbol 52, name set_phil_state_pos, type tag 2, bind 0, sect 1
+	[00:06:06.536,000] <dbg> llext: llext_count_export_syms: unhandled symbol 53, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.546,000] <dbg> llext: llext_count_export_syms: unhandled symbol 54, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.557,000] <dbg> llext: llext_count_export_syms: unhandled symbol 55, name print_phil_state, type tag 2, bind 0, sect 1
+	[00:06:06.569,000] <dbg> llext: llext_count_export_syms: unhandled symbol 56, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.580,000] <dbg> llext: llext_count_export_syms: unhandled symbol 57, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.590,000] <dbg> llext: llext_count_export_syms: unhandled symbol 58, name get_random_delay, type tag 2, bind 0, sect 1
+	[00:06:06.602,000] <dbg> llext: llext_count_export_syms: unhandled symbol 59, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.613,000] <dbg> llext: llext_count_export_syms: unhandled symbol 60, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.624,000] <dbg> llext: llext_count_export_syms: unhandled symbol 61, name is_last_philosopher, type tag 2, bind 0, sect 1
+	[00:06:06.636,000] <dbg> llext: llext_count_export_syms: unhandled symbol 62, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.646,000] <dbg> llext: llext_count_export_syms: unhandled symbol 63, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.657,000] <dbg> llext: llext_count_export_syms: unhandled symbol 64, name new_prio, type tag 2, bind 0, sect 1
+	[00:06:06.668,000] <dbg> llext: llext_count_export_syms: unhandled symbol 65, name init_objects, type tag 2, bind 0, sect 1
+	[00:06:06.680,000] <dbg> llext: llext_count_export_syms: unhandled symbol 66, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.690,000] <dbg> llext: llext_count_export_syms: unhandled symbol 67, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.701,000] <dbg> llext: llext_count_export_syms: unhandled symbol 68, name start_threads, type tag 2, bind 0, sect 1
+	[00:06:06.713,000] <dbg> llext: llext_count_export_syms: unhandled symbol 69, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.723,000] <dbg> llext: llext_count_export_syms: unhandled symbol 70, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.734,000] <dbg> llext: llext_count_export_syms: unhandled symbol 71, name display_demo_description, type tag 2, bind 0, sect 1
+	[00:06:06.747,000] <dbg> llext: llext_count_export_syms: unhandled symbol 72, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.757,000] <dbg> llext: llext_count_export_syms: unhandled symbol 73, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.768,000] <dbg> llext: llext_count_export_syms: unhandled symbol 74, name $d, type tag 0, bind 0, sect 1
+	[00:06:06.779,000] <dbg> llext: llext_count_export_syms: unhandled symbol 75, name , type tag 3, bind 0, sect 8
+	[00:06:06.789,000] <dbg> llext: llext_count_export_syms: unhandled symbol 76, name $d, type tag 0, bind 0, sect 8
+	[00:06:06.800,000] <dbg> llext: llext_count_export_syms: unhandled symbol 77, name $t, type tag 0, bind 0, sect 1
+	[00:06:06.811,000] <dbg> llext: llext_count_export_syms: unhandled symbol 78, name , type tag 3, bind 0, sect 10
+	[00:06:06.821,000] <dbg> llext: llext_count_export_syms: unhandled symbol 79, name , type tag 3, bind 0, sect 11
+	[00:06:06.832,000] <dbg> llext: llext_count_export_syms: unhandled symbol 80, name __aeabi_read_tp, type tag 0, bind 1, sect 0
+	[00:06:06.844,000] <dbg> llext: llext_count_export_syms: unhandled symbol 81, name z_tls_current, type tag 6, bind 1, sect 0
+	[00:06:06.855,000] <dbg> llext: llext_count_export_syms: unhandled symbol 82, name __aeabi_uldivmod, type tag 0, bind 1, sect 0
+	[00:06:06.867,000] <dbg> llext: llext_count_export_syms: unhandled symbol 83, name z_impl_k_thread_create, type tag 0, bind 1, sect 0
+	[00:06:06.879,000] <dbg> llext: llext_count_export_syms: unhandled symbol 84, name z_impl_k_sleep, type tag 0, bind 1, sect 0
+	[00:06:06.891,000] <dbg> llext: llext_count_export_syms: unhandled symbol 85, name z_impl_k_thread_start, type tag 0, bind 1, sect 0
+	[00:06:06.904,000] <dbg> llext: llext_count_export_syms: unhandled symbol 86, name z_impl_k_thread_priority_get, type tag 0, bind 1, sect 0
+	[00:06:06.916,000] <dbg> llext: llext_count_export_syms: unhandled symbol 87, name z_impl_k_thread_name_set, type tag 0, bind 1, sect 0
+	[00:06:06.929,000] <dbg> llext: llext_count_export_syms: unhandled symbol 88, name z_impl_k_uptime_ticks, type tag 0, bind 1, sect 0
+	[00:06:06.941,000] <dbg> llext: llext_count_export_syms: unhandled symbol 89, name z_impl_k_mutex_init, type tag 0, bind 1, sect 0
+	[00:06:06.954,000] <dbg> llext: llext_count_export_syms: unhandled symbol 90, name z_impl_k_mutex_lock, type tag 0, bind 1, sect 0
+	[00:06:06.966,000] <dbg> llext: llext_count_export_syms: unhandled symbol 91, name z_impl_k_mutex_unlock, type tag 0, bind 1, sect 0
+	[00:06:06.978,000] <dbg> llext: llext_count_export_syms: unhandled symbol 92, name fork_objs, type tag 1, bind 1, sect 5
+	[00:06:06.989,000] <dbg> llext: llext_count_export_syms: unhandled symbol 93, name printk, type tag 0, bind 1, sect 0
+	[00:06:07.000,000] <dbg> llext: llext_count_export_syms: unhandled symbol 94, name __aeabi_uidiv, type tag 0, bind 1, sect 0
+	[00:06:07.012,000] <dbg> llext: llext_count_export_syms: function symbol 95, name philosopher, type tag 2, bind 1, sect 1
+	[00:06:07.023,000] <dbg> llext: llext_count_export_syms: unhandled symbol 96, name __aeabi_idivmod, type tag 0, bind 1, sect 0
+	[00:06:07.035,000] <dbg> llext: llext_count_export_syms: unhandled symbol 97, name snprintf, type tag 0, bind 1, sect 0
+	[00:06:07.046,000] <dbg> llext: llext_count_export_syms: function symbol 98, name philosophers, type tag 2, bind 1, sect 1
+	[00:06:07.058,000] <dbg> llext: llext_count_export_syms: unhandled symbol 99, name k_sched_time_slice_set, type tag 0, bind 1, sect 0
+	[00:06:07.070,000] <dbg> llext: llext_count_export_syms: unhandled symbol 100, name symbol_philosophers, type tag 1, bind 1, sect 8
+	[00:06:07.082,000] <dbg> llext: do_llext_load: Allocating memory for symbol table...
+	[00:06:07.091,000] <dbg> llext: do_llext_load: Copying symbols...
+	[00:06:07.097,000] <dbg> llext: llext_copy_symbols: function symbol 0 name philosopher addr 0x20009f0d
+	[00:06:07.107,000] <dbg> llext: llext_copy_symbols: function symbol 1 name philosophers addr 0x2000a181
+	[00:06:07.117,000] <dbg> llext: do_llext_load: Linking ELF...
+	[00:06:07.123,000] <dbg> llext: llext_link: relocation section .rel.text (2) linked to section 12 has 41 relocations
+	[00:06:07.134,000] <dbg> llext: llext_link: relocation 2:0 info 500a (type 10, sym 80) offset 136 sym_name __aeabi_read_tp sym_type 0 sym_bind 1 sym_ndx0
+	[00:06:07.148,000] <err> llext: Undefined symbol with no entry in symbol table __aeabi_read_tp, offset 136, link section 12
+	[00:06:07.160,000] <err> llext: Failed to link, ret -61
+	[00:06:07.166,000] <dbg> llext: do_llext_load: Failed to load extension, freeing memory...
+	Failed to load extension phil, return code -61
+
+12/28
+=====
+*** Attempted to use header from sample app with same error
+
+	west -vv build -p -b frdm_k64f samples/subsys/llext/shell_loader
+	/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/include -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated -imacros/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h -o build/philosophers.llext /home/lauren/zephyrproject/zephyr/tests/subsys/llext/philosophers/main.c
+	xxd -p build/philosophers.llext | tr -d '\n'
+
+*** Attempted to reduce down to smaller hello_phil app just creating a thread; failed to load extension
+
+	west -vv build -p -b frdm_k64f samples/subsys/llext/shell_loader
+
+	/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/include -imacros/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated -o /home/lauren/zephyrproject/zephyr/build/hello_phil.llext /home/lauren/zephyrproject/zephyr/tests/subsys/llext/hello_phil/hello_phil.c
+	xxd -p build/hello_phil.llext | tr -d '\n'
+
+
+		We REALLY NEED that -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated
+
+		[00:47:07.139,000] <dbg> llext_shell: cmd_llext_load_hex: hex2bin hex len 3736, llext buf sz 8192, read 1868
+	[00:47:07.149,000] <dbg> llext_shell: cmd_llext_load_hex: 4 byte MAGIC
+										7f 45 4c 46                                      |.ELF             
+	[00:47:07.166,000] <dbg> llext: llext_load: Loading relocatable or shared elf
+	[00:47:07.173,000] <dbg> llext: do_llext_load: Finding ELF tables...
+	[00:47:07.180,000] <dbg> llext: llext_find_tables: section 0 at 51c: name 0, type 0, flags 0, addr 0, size 0
+	[00:47:07.190,000] <dbg> llext: llext_find_tables: section 1 at 544: name 31, type 1, flags 6, addr 0, size 244
+	[00:47:07.201,000] <dbg> llext: llext_find_tables: section 2 at 56c: name 27, type 9, flags 40, addr 0, size 72
+	[00:47:07.211,000] <dbg> llext: llext_find_tables: section 3 at 594: name 37, type 1, flags 3, addr 0, size 0
+	[00:47:07.221,000] <dbg> llext: llext_find_tables: section 4 at 5bc: name 43, type 8, flags 3, addr 0, size 184
+	[00:47:07.232,000] <dbg> llext: llext_find_tables: section 5 at 5e4: name 48, type 1, flags 2, addr 0, size 67
+	[00:47:07.242,000] <dbg> llext: llext_find_tables: section 6 at 60c: name 56, type 8, flags 3, addr 0, size 2048
+	[00:47:07.253,000] <dbg> llext: llext_find_tables: section 7 at 634: name 149, type 1, flags 3, addr 0, size 8
+	[00:47:07.263,000] <dbg> llext: llext_find_tables: section 8 at 65c: name 145, type 9, flags 40, addr 0, size 16
+	[00:47:07.274,000] <dbg> llext: llext_find_tables: section 9 at 684: name 163, type 1, flags 30, addr 0, size 33
+	[00:47:07.285,000] <dbg> llext: llext_find_tables: section 10 at 6ac: name 172, type 1879048195, flags 0, addr 0, size 42
+	[00:47:07.296,000] <dbg> llext: llext_find_tables: section 11 at 6d4: name 1, type 2, flags 0, addr 0, size 480
+	[00:47:07.306,000] <dbg> llext: llext_find_tables: symtab at 11
+	[00:47:07.313,000] <dbg> llext: llext_find_tables: section 12 at 6fc: name 9, type 3, flags 0, addr 0, size 100
+	[00:47:07.323,000] <dbg> llext: llext_find_tables: strtab at 12
+	[00:47:07.330,000] <dbg> llext: llext_find_tables: section 13 at 724: name 17, type 3, flags 0, addr 0, size 188
+	[00:47:07.340,000] <dbg> llext: llext_find_tables: shstrtab at 13
+	[00:47:07.347,000] <dbg> llext: do_llext_load: Allocate and copy strings...
+	[00:47:07.354,000] <dbg> llext: do_llext_load: Mapping ELF sections...
+	[00:47:07.361,000] <dbg> llext: llext_map_sections: section 0 name 
+	[00:47:07.368,000] <dbg> llext: llext_map_sections: Not copied section 
+	[00:47:07.375,000] <dbg> llext: llext_map_sections: section 1 name .text
+	[00:47:07.382,000] <dbg> llext: llext_map_sections: section 2 name .rel.text
+	[00:47:07.389,000] <dbg> llext: llext_map_sections: Not copied section .rel.text
+	[00:47:07.397,000] <dbg> llext: llext_map_sections: section 3 name .data
+	[00:47:07.404,000] <dbg> llext: llext_map_sections: section 4 name .bss
+	[00:47:07.411,000] <dbg> llext: llext_map_sections: section 5 name .rodata
+	[00:47:07.419,000] <dbg> llext: llext_map_sections: section 6 name .noinit."/home/lauren/zephyrproject/zephyr/tests/subsys/llext/hello_phil/hello_phil.c0
+	[00:47:07.433,000] <dbg> llext: llext_map_sections: Not copied section .noinit."/home/lauren/zephyrproject/zephyr/tests/subsys/llext/hello_phil/hello_ph0
+	[00:47:07.448,000] <dbg> llext: llext_map_sections: section 7 name .exported_sym
+	[00:47:07.455,000] <dbg> llext: llext_map_sections: section 8 name .rel.exported_sym
+	[00:47:07.464,000] <dbg> llext: llext_map_sections: Not copied section .rel.exported_sym
+	[00:47:07.472,000] <dbg> llext: llext_map_sections: section 9 name .comment
+	[00:47:07.479,000] <dbg> llext: llext_map_sections: Not copied section .comment
+	[00:47:07.487,000] <dbg> llext: llext_map_sections: section 10 name .ARM.attributes
+	[00:47:07.495,000] <dbg> llext: llext_map_sections: Not copied section .ARM.attributes
+	[00:47:07.504,000] <dbg> llext: llext_map_sections: section 11 name .symtab
+	[00:47:07.511,000] <dbg> llext: llext_map_sections: Not copied section .symtab
+	[00:47:07.519,000] <dbg> llext: llext_map_sections: section 12 name .strtab
+	[00:47:07.526,000] <dbg> llext: llext_map_sections: Not copied section .strtab
+	[00:47:07.534,000] <dbg> llext: llext_map_sections: section 13 name .shstrtab
+	[00:47:07.541,000] <dbg> llext: llext_map_sections: Not copied section .shstrtab
+	[00:47:07.549,000] <dbg> llext: do_llext_load: Allocate and copy sections...
+	[00:47:07.556,000] <dbg> llext: do_llext_load: Counting exported symbols...
+	[00:47:07.564,000] <dbg> llext: llext_count_export_syms: symbol count 30
+	[00:47:07.571,000] <dbg> llext: llext_count_export_syms: unhandled symbol 1, name hello_phil.c, type tag 4, bind 0, sect 65521
+	[00:47:07.583,000] <dbg> llext: llext_count_export_syms: unhandled symbol 2, name , type tag 3, bind 0, sect 1
+	[00:47:07.593,000] <dbg> llext: llext_count_export_syms: unhandled symbol 3, name , type tag 3, bind 0, sect 3
+	[00:47:07.604,000] <dbg> llext: llext_count_export_syms: unhandled symbol 4, name , type tag 3, bind 0, sect 4
+	[00:47:07.614,000] <dbg> llext: llext_count_export_syms: unhandled symbol 5, name k_thread_create, type tag 2, bind 0, sect 1
+	[00:47:07.626,000] <dbg> llext: llext_count_export_syms: unhandled symbol 6, name $t, type tag 0, bind 0, sect 1
+	[00:47:07.636,000] <dbg> llext: llext_count_export_syms: unhandled symbol 7, name $d, type tag 0, bind 0, sect 1
+	[00:47:07.647,000] <dbg> llext: llext_count_export_syms: unhandled symbol 8, name , type tag 3, bind 0, sect 5
+	[00:47:07.657,000] <dbg> llext: llext_count_export_syms: unhandled symbol 9, name $d, type tag 0, bind 0, sect 5
+	[00:47:07.668,000] <dbg> llext: llext_count_export_syms: unhandled symbol 10, name number, type tag 1, bind 0, sect 5
+	[00:47:07.679,000] <dbg> llext: llext_count_export_syms: unhandled symbol 11, name $d, type tag 0, bind 0, sect 4
+	[00:47:07.690,000] <dbg> llext: llext_count_export_syms: unhandled symbol 12, name thread, type tag 0, bind 0, sect 4
+	[00:47:07.701,000] <dbg> llext: llext_count_export_syms: unhandled symbol 13, name , type tag 3, bind 0, sect 6
+	[00:47:07.711,000] <dbg> llext: llext_count_export_syms: unhandled symbol 14, name $d, type tag 0, bind 0, sect 6
+	[00:47:07.722,000] <dbg> llext: llext_count_export_syms: unhandled symbol 15, name stack, type tag 1, bind 0, sect 6
+	[00:47:07.733,000] <dbg> llext: llext_count_export_syms: unhandled symbol 16, name $t, type tag 0, bind 0, sect 1
+	[00:47:07.743,000] <dbg> llext: llext_count_export_syms: unhandled symbol 17, name $d, type tag 0, bind 0, sect 1
+	[00:47:07.754,000] <dbg> llext: llext_count_export_syms: unhandled symbol 18, name $t, type tag 0, bind 0, sect 1
+	[00:47:07.765,000] <dbg> llext: llext_count_export_syms: unhandled symbol 19, name $d, type tag 0, bind 0, sect 1
+	[00:47:07.775,000] <dbg> llext: llext_count_export_syms: unhandled symbol 20, name , type tag 3, bind 0, sect 7
+	[00:47:07.786,000] <dbg> llext: llext_count_export_syms: unhandled symbol 21, name $d, type tag 0, bind 0, sect 7
+	[00:47:07.797,000] <dbg> llext: llext_count_export_syms: unhandled symbol 22, name $t, type tag 0, bind 0, sect 1
+	[00:47:07.807,000] <dbg> llext: llext_count_export_syms: unhandled symbol 23, name , type tag 3, bind 0, sect 9
+	[00:47:07.818,000] <dbg> llext: llext_count_export_syms: unhandled symbol 24, name , type tag 3, bind 0, sect 10
+	[00:47:07.828,000] <dbg> llext: llext_count_export_syms: unhandled symbol 25, name z_impl_k_thread_create, type tag 0, bind 1, sect 0
+	[00:47:07.841,000] <dbg> llext: llext_count_export_syms: function symbol 26, name philosopher, type tag 2, bind 1, sect 1
+	[00:47:07.852,000] <dbg> llext: llext_count_export_syms: unhandled symbol 27, name printk, type tag 0, bind 1, sect 0
+	[00:47:07.863,000] <dbg> llext: llext_count_export_syms: function symbol 28, name hello_phil, type tag 2, bind 1, sect 1
+	[00:47:07.874,000] <dbg> llext: llext_count_export_syms: unhandled symbol 29, name symbol_hello_phil, type tag 1, bind 1, sect 7
+	[00:47:07.886,000] <dbg> llext: do_llext_load: Allocating memory for symbol table...
+	[00:47:07.895,000] <dbg> llext: do_llext_load: Copying symbols...
+	[00:47:07.901,000] <dbg> llext: llext_copy_symbols: function symbol 0 name philosopher addr 0x20009c35
+	[00:47:07.911,000] <dbg> llext: llext_copy_symbols: function symbol 1 name hello_phil addr 0x20009c65
+	[00:47:07.920,000] <dbg> llext: do_llext_load: Linking ELF...
+	[00:47:07.927,000] <dbg> llext: llext_link: relocation section .rel.text (2) linked to section 11 has 9 relocations
+	[00:47:07.937,000] <dbg> llext: llext_link: relocation 2:0 info 1902 (type 2, sym 25) offset 76 sym_name z_impl_k_thread_create sym_type 0 sym_bind 1 sy0
+	[00:47:07.952,000] <err> llext: Undefined symbol with no entry in symbol table z_impl_k_thread_create, offset 76, link section 11
+	[00:47:07.964,000] <err> llext: Failed to link, ret -61
+	[00:47:07.970,000] <dbg> llext: do_llext_load: Failed to load extension, freeing memory...
+	Failed to load extension hello_phil, return code -61
+
+*** Attempted to create an extension with just mutex lock and unlock and it hung
+
+$ llext call_fn hp hello_phil
+hello world
+A number is 42
+_
+
+*** (with samples/subsys/llext already built)
+
+/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -c -I /home/lauren/zephyrproject/zephyr/include -imacros/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated -o /home/lauren/zephyrproject/zephyr/build/hello_phil.llext /home/lauren/zephyrproject/zephyr/tests/subsys/llext/hello_phil/hello_phil.c
+xxd -p /home/lauren/zephyrproject/zephyr/build/hello_phil.llext | tr -d '\n'
+
+12/29
+=====
+
+*** Did some reading on dining philosophers. Dijikstra's solution is that one philosopher picks up their right chopstick first instead of left to avoid circular deadlock https://pages.mtu.edu/~shene/NSF-3/e-Book/MUTEX/TM-example-left-right.html
+
+https://pages.mtu.edu/~shene/NSF-3/e-Book/MUTEX/TM-example-left-right.html
+
+*** Old issue but why can't the function exported show up in the list?
+
+*** Semaphore won't load but mutex will
+
+*** Can't even call a function ?!
+
+	https://github.com/search?q=R_ARM_THM_CALL&type=code
+
+	[00:00:10.302,000] <dbg> llext: llext_link: relocation 2:2 info 110a (type 10, sym 17) offset 82 sym_name philosopher sym_type 2 sym_bind 1 sym_ndx 1
+	[00:00:10.316,000] <inf> llext: found section symbol philosopher addr 0x1fff90ec
+	[00:00:10.323,000] <inf> llext: relocating (linking) symbol philosopher type 2 binding 1 ndx 1 offset 82 link section 10
+	[00:00:10.335,000] <inf> llext: writing relocation symbol philosopher type 10 sym 17 at addr 0x2000993e addr 0x1fff90ec
+	[00:00:10.346,000] <dbg> elf: arch_elf_relocate: Unsupported ARM elf relocation type 10 at address 2000993e
+
+	...
+	[00:05:15.958,000] <dbg> llext: do_llext_load: loaded module, .text at 0x200098ec, .rodata at 0x20009964
+	[00:05:15.968,000] <inf> llext: Loaded extension hp
+	Successfully loaded extension hp, addr 0x200097ac
+
+	$ llext call_fn hp hello_phil
+	hello world
+	A number is 42
+	_
+	(hangs)
+
+	https://github.com/angr/cle/blob/8bd270f92db4177194f6a6fe5c7261305fcec2f8/cle/backends/elf/relocation/arm.py#L247
+
+*** qemu_xtensa doesn't work either
+
+	[00:00:10.100,000] <dbg> llext: llext_load: Loading relocatable or shared elf
+	[00:00:10.100,000] <dbg> llext: do_llext_load: Finding ELF tables...
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 0 at 3d0: name 0, type 0, flags 0, addr 0, size 0
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 1 at 3f8: name 11, type 5, flags 2, addr 94, size 48
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 2 at 420: name 17, type 11, flags 2, addr c4, size 112
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: symtab at 2
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 3 at 448: name 25, type 3, flags 2, addr 134, size 51
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: strtab at 3
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 4 at 470: name 33, type 4, flags 2, addr 168, size 72
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 5 at 498: name 43, type 4, flags 42, addr 1b0, size 12
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 6 at 4c0: name 53, type 1, flags 6, addr 1bc, size 76
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 7 at 4e8: name 59, type 1, flags 2, addr 208, size 52
+	[00:00:10.100,000] <dbg> llext: llext_find_tables: section 8 at 510: name 67, type 1, flags 2, addr 23c, size 16
+	[00:00:10.110,000] <dbg> llext: llext_find_tables: section 9 at 538: name 76, type 6, flags 3, addr 124c, size 160
+	[00:00:10.110,000] <dbg> llext: llext_find_tables: section 10 at 560: name 85, type 1, flags 3, addr 12ec, size 4
+	[00:00:10.110,000] <dbg> llext: llext_find_tables: section 11 at 588: name 90, type 1, flags 3, addr 12f0, size 8
+	[00:00:10.110,000] <dbg> llext: llext_find_tables: section 12 at 5b0: name 104, type 1, flags 30, addr 0, size 32
+	[00:00:10.110,000] <dbg> llext: llext_find_tables: section 13 at 5d8: name 113, type 7, flags 0, addr 0, size 56
+	[00:00:10.110,000] <dbg> llext: llext_find_tables: section 14 at 600: name 1, type 3, flags 0, addr 0, size 126
+	[00:00:10.110,000] <dbg> llext: llext_find_tables: shstrtab at 14
+	[00:00:10.110,000] <dbg> llext: do_llext_load: Allocate and copy strings...
+	[00:00:10.110,000] <dbg> llext: do_llext_load: Mapping ELF sections...
+	[00:00:10.110,000] <dbg> llext: llext_map_sections: section 0 name 
+	[00:00:10.110,000] <dbg> llext: llext_map_sections: Not copied section 
+	[00:00:10.110,000] <dbg> llext: llext_map_sections: section 1 name .hash
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: Not copied section .hash
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 2 name .dynsym
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: Not copied section .dynsym
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 3 name .dynstr
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: Not copied section .dynstr
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 4 name .rela.dyn
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: Not copied section .rela.dyn
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 5 name .rela.plt
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: Not copied section .rela.plt
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 6 name .text
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 7 name .rodata
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 8 name .got.loc
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: Not copied section .got.loc
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 9 name .dynamic
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: Not copied section .dynamic
+	[00:00:10.120,000] <dbg> llext: llext_map_sections: section 10 name .got
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: Not copied section .got
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: section 11 name .exported_sym
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: section 12 name .comment
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: Not copied section .comment
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: section 13 name .xtensa.info
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: Not copied section .xtensa.info
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: section 14 name .shstrtab
+	[00:00:10.130,000] <dbg> llext: llext_map_sections: Not copied section .shstrtab
+	[00:00:10.130,000] <dbg> llext: do_llext_load: Allocate and copy sections...
+	[00:00:10.130,000] <dbg> llext: do_llext_load: Counting exported symbols...
+	[00:00:10.130,000] <dbg> llext: llext_count_export_syms: symbol count 7
+	[00:00:10.130,000] <dbg> llext: llext_count_export_syms: unhandled symbol 1, name symbol_hello_world, type tag 1, bind 1, sect 11
+	[00:00:10.130,000] <dbg> llext: llext_count_export_syms: unhandled symbol 2, name printk, type tag 0, bind 1, sect 0
+	[00:00:10.130,000] <dbg> llext: llext_count_export_syms: unhandled symbol 3, name __bss_start, type tag 0, bind 1, sect 11
+	[00:00:10.140,000] <dbg> llext: llext_count_export_syms: function symbol 4, name hello_world, type tag 2, bind 1, sect 6
+	[00:00:10.140,000] <dbg> llext: llext_count_export_syms: unhandled symbol 5, name _edata, type tag 0, bind 1, sect 11
+	[00:00:10.140,000] <dbg> llext: llext_count_export_syms: unhandled symbol 6, name _end, type tag 0, bind 1, sect 11
+	[00:00:10.140,000] <dbg> llext: do_llext_load: Allocating memory for symbol table...
+	[00:00:10.140,000] <dbg> llext: do_llext_load: Copying symbols...
+	[00:00:10.140,000] <dbg> llext: llext_copy_symbols: function symbol 0 name hello_world addr 0x10944
+	[00:00:10.140,000] <dbg> llext: do_llext_load: Linking ELF...
+	[00:00:10.140,000] <dbg> llext: llext_link_plt: Found 0x1087d in PLT 4 size 12 cnt 6 text 0x1091c
+	[00:00:10.140,000] <dbg> llext: llext_link_plt: symbol  offset 0xc r-offset 0x1c8 .text offset 0x1bc stb 0
+	[00:00:10.140,000] <dbg> llext: llext_link_plt: symbol  offset 0x14 r-offset 0x1d0 .text offset 0x1bc stb 0
+	[00:00:10.140,000] <dbg> llext: llext_link_plt: symbol  offset 0x134 r-offset 0x12f0 .text offset 0x1bc stb 0
+	[00:00:10.140,000] <dbg> llext: llext_link_plt: symbol  offset 0 r-offset 0x1bc .text offset 0x1bc stb 0
+	[00:00:10.150,000] <dbg> llext: llext_link_plt: symbol  offset 0x4 r-offset 0x1c0 .text offset 0x1bc stb 0
+	[00:00:10.150,000] <dbg> llext: llext_link_plt: symbol hello_world offset 0x138 r-offset 0x12f4 .text offset 0x1bc stb 1
+	[00:00:10.150,000] <dbg> llext: llext_link_plt: Found 0x10887 in PLT 4 size 12 cnt 1 text 0x1091c
+	[00:00:10.150,000] <dbg> llext: llext_link_plt: symbol printk offset 0x10 r-offset 0x1cc .text offset 0x1bc stb 1
+	[00:00:10.150,000] <dbg> llext: llext_export_symbols: sym 0 name  in 0x10a3c
+	[00:00:10.150,000] <dbg> llext: do_llext_load: loaded module, .text at 0x1091c, .rodata at 0x1096c
+	[00:00:10.150,000] <inf> llext: Loaded extension hello
+
+		Assertion failed at WEST_TOPDIR/zephyr/tests/subsys/llext/src/test_llext_simple.c:51: llext_test_llext_simple: (hello_world_fn is NULL)
+	hello_world should be an exported symbol
+	FAIL - test_llext_simple in 10.156 seconds
+	===================================================================
+	TESTSUITE llext failed.
+
+	------ TESTSUITE SUMMARY START ------
+
+	SUITE FAIL -   0.00% [llext]: pass = 0, fail = 1, skip = 0, total = 1 duration = 10.156 seconds
+	- FAIL - [llext.test_llext_simple] duration = 10.156 seconds
+
+	------ TESTSUITE SUMMARY END ------
+
+	===================================================================
+	PROJECT EXECUTION FAILED
+
+12/30
+=====
+
+*** Looking at libkernel.a objdump. Removed R_ARM_ABS32 leaving 392 relocations.
+
+	/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-objdump -r libkernel.a > ~/tmp/libkernel_objdump.txt
+
+	392 R_ARM_THM
+		 330 R_ARM_THM_CALL
+		 62  R_ARM_THM_JUMP24
+
+*** 
+
+[00:00:09.569,000] <dbg> llext_shell: cmd_llext_load_hex: hex2bin hex len 2800, llext buf sz 8192, read 1400
+[00:00:09.579,000] <dbg> llext_shell: cmd_llext_load_hex: 4 byte MAGIC
+                                      7f 45 4c 46                                      |.ELF             
+[00:00:09.596,000] <dbg> llext: llext_load: Loading relocatable or shared elf
+[00:00:09.603,000] <dbg> llext: do_llext_load: Finding ELF tables...
+[00:00:09.610,000] <dbg> llext: llext_find_tables: section 0 at 370: name 0, type 0, flags 0, addr 0, size 0
+[00:00:09.620,000] <dbg> llext: llext_find_tables: section 1 at 398: name 31, type 1, flags 6, addr 0, size 112
+[00:00:09.631,000] <dbg> llext: llext_find_tables: section 2 at 3c0: name 27, type 9, flags 40, addr 0, size 48
+[00:00:09.641,000] <dbg> llext: llext_find_tables: section 3 at 3e8: name 37, type 1, flags 3, addr 0, size 0
+[00:00:09.652,000] <dbg> llext: llext_find_tables: section 4 at 410: name 43, type 8, flags 3, addr 0, size 0
+[00:00:09.662,000] <dbg> llext: llext_find_tables: section 5 at 438: name 48, type 1, flags 2, addr 0, size 67
+[00:00:09.672,000] <dbg> llext: llext_find_tables: section 6 at 460: name 60, type 1, flags 3, addr 0, size 8
+[00:00:09.683,000] <dbg> llext: llext_find_tables: section 7 at 488: name 56, type 9, flags 40, addr 0, size 16
+[00:00:09.693,000] <dbg> llext: llext_find_tables: section 8 at 4b0: name 74, type 1, flags 30, addr 0, size 33
+[00:00:09.704,000] <dbg> llext: llext_find_tables: section 9 at 4d8: name 83, type 1879048195, flags 0, addr 0, size 42
+[00:00:09.715,000] <dbg> llext: llext_find_tables: section 10 at 500: name 1, type 2, flags 0, addr 0, size 336
+[00:00:09.725,000] <dbg> llext: llext_find_tables: symtab at 10
+[00:00:09.732,000] <dbg> llext: llext_find_tables: section 11 at 528: name 9, type 3, flags 0, addr 0, size 64
+[00:00:09.742,000] <dbg> llext: llext_find_tables: strtab at 11
+[00:00:09.748,000] <dbg> llext: llext_find_tables: section 12 at 550: name 17, type 3, flags 0, addr 0, size 99
+[00:00:09.759,000] <dbg> llext: llext_find_tables: shstrtab at 12
+[00:00:09.765,000] <dbg> llext: do_llext_load: Allocate and copy strings...
+[00:00:09.773,000] <dbg> llext: do_llext_load: Mapping ELF sections...
+[00:00:09.780,000] <dbg> llext: llext_map_sections: section 0 name 
+[00:00:09.786,000] <dbg> llext: llext_map_sections: Not copied section 
+[00:00:09.793,000] <dbg> llext: llext_map_sections: section 1 name .text
+[00:00:09.801,000] <dbg> llext: llext_map_sections: section 2 name .rel.text
+[00:00:09.808,000] <dbg> llext: llext_map_sections: Not copied section .rel.text
+[00:00:09.816,000] <dbg> llext: llext_map_sections: section 3 name .data
+[00:00:09.823,000] <dbg> llext: llext_map_sections: section 4 name .bss
+[00:00:09.830,000] <dbg> llext: llext_map_sections: section 5 name .rodata
+[00:00:09.837,000] <dbg> llext: llext_map_sections: section 6 name .exported_sym
+[00:00:09.845,000] <dbg> llext: llext_map_sections: section 7 name .rel.exported_sym
+[00:00:09.853,000] <dbg> llext: llext_map_sections: Not copied section .rel.exported_sym
+[00:00:09.862,000] <dbg> llext: llext_map_sections: section 8 name .comment
+[00:00:09.869,000] <dbg> llext: llext_map_sections: Not copied section .comment
+[00:00:09.877,000] <dbg> llext: llext_map_sections: section 9 name .ARM.attributes
+[00:00:09.885,000] <dbg> llext: llext_map_sections: Not copied section .ARM.attributes
+[00:00:09.893,000] <dbg> llext: llext_map_sections: section 10 name .symtab
+[00:00:09.901,000] <dbg> llext: llext_map_sections: Not copied section .symtab
+[00:00:09.908,000] <dbg> llext: llext_map_sections: section 11 name .strtab
+[00:00:09.916,000] <dbg> llext: llext_map_sections: Not copied section .strtab
+[00:00:09.923,000] <dbg> llext: llext_map_sections: section 12 name .shstrtab
+[00:00:09.931,000] <dbg> llext: llext_map_sections: Not copied section .shstrtab
+[00:00:09.939,000] <dbg> llext: do_llext_load: Allocate and copy sections...
+[00:00:09.946,000] <dbg> llext: do_llext_load: Counting exported symbols...
+[00:00:09.953,000] <dbg> llext: llext_count_export_syms: symbol count 21
+[00:00:09.961,000] <dbg> llext: llext_count_export_syms: unhandled symbol 1, name hello_phil.c, type tag 4, bind 0, sect 65521
+[00:00:09.972,000] <dbg> llext: llext_count_export_syms: unhandled symbol 2, name , type tag 3, bind 0, sect 1
+[00:00:09.983,000] <dbg> llext: llext_count_export_syms: unhandled symbol 3, name , type tag 3, bind 0, sect 3
+[00:00:09.993,000] <dbg> llext: llext_count_export_syms: unhandled symbol 4, name , type tag 3, bind 0, sect 4
+[00:00:10.004,000] <dbg> llext: llext_count_export_syms: unhandled symbol 5, name , type tag 3, bind 0, sect 5
+[00:00:10.014,000] <dbg> llext: llext_count_export_syms: unhandled symbol 6, name $d, type tag 0, bind 0, sect 5
+[00:00:10.025,000] <dbg> llext: llext_count_export_syms: unhandled symbol 7, name number, type tag 1, bind 0, sect 5
+[00:00:10.036,000] <dbg> llext: llext_count_export_syms: unhandled symbol 8, name $t, type tag 0, bind 0, sect 1
+[00:00:10.046,000] <dbg> llext: llext_count_export_syms: unhandled symbol 9, name $d, type tag 0, bind 0, sect 1
+[00:00:10.057,000] <dbg> llext: llext_count_export_syms: unhandled symbol 10, name $t, type tag 0, bind 0, sect 1
+[00:00:10.067,000] <dbg> llext: llext_count_export_syms: unhandled symbol 11, name $d, type tag 0, bind 0, sect 1
+[00:00:10.078,000] <dbg> llext: llext_count_export_syms: unhandled symbol 12, name , type tag 3, bind 0, sect 6
+[00:00:10.089,000] <dbg> llext: llext_count_export_syms: unhandled symbol 13, name $d, type tag 0, bind 0, sect 6
+[00:00:10.099,000] <dbg> llext: llext_count_export_syms: unhandled symbol 14, name $t, type tag 0, bind 0, sect 1
+[00:00:10.110,000] <dbg> llext: llext_count_export_syms: unhandled symbol 15, name , type tag 3, bind 0, sect 8
+[00:00:10.120,000] <dbg> llext: llext_count_export_syms: unhandled symbol 16, name , type tag 3, bind 0, sect 9
+[00:00:10.131,000] <dbg> llext: llext_count_export_syms: function symbol 17, name philosopher, type tag 2, bind 1, sect 1
+[00:00:10.142,000] <dbg> llext: llext_count_export_syms: unhandled symbol 18, name printk, type tag 0, bind 1, sect 0
+[00:00:10.153,000] <dbg> llext: llext_count_export_syms: function symbol 19, name hello_phil, type tag 2, bind 1, sect 1
+[00:00:10.165,000] <dbg> llext: llext_count_export_syms: unhandled symbol 20, name symbol_hello_phil, type tag 1, bind 1, sect 6
+[00:00:10.177,000] <dbg> llext: do_llext_load: Allocating memory for symbol table...
+[00:00:10.185,000] <dbg> llext: do_llext_load: Copying symbols...
+[00:00:10.191,000] <dbg> llext: llext_copy_symbols: function symbol 0 name philosopher addr 0x200098ed
+[00:00:10.201,000] <dbg> llext: llext_copy_symbols: function symbol 1 name hello_phil addr 0x2000991d
+[00:00:10.211,000] <dbg> llext: do_llext_load: Linking ELF...
+[00:00:10.217,000] <dbg> llext: llext_link: relocation section .rel.text (2) linked to section 10 has 6 relocations
+[00:00:10.228,000] <dbg> llext: llext_link: relocation 2:0 info 502 (type 2, sym 5) offset 40 sym_name  sym_type 3 sym_bind 0 sym_ndx 5
+[00:00:10.240,000] <inf> llext: found section symbol  addr 0x20009968
+[00:00:10.247,000] <inf> llext: relocating (linking) symbol  type 3 binding 0 ndx 5 offset 40 link section 10
+[00:00:10.257,000] <inf> llext: writing relocation symbol  type 2 sym 5 at addr 0x20009914 addr 0x20009968
+[00:00:10.267,000] <dbg> llext: llext_link: relocation 2:1 info 1202 (type 2, sym 18) offset 44 sym_name printk sym_type 0 sym_bind 1 sym_ndx 0
+[00:00:10.281,000] <inf> llext: relocating (linking) symbol printk type 0 binding 1 ndx 0 offset 44 link section 10
+[00:00:10.292,000] <inf> llext: writing relocation symbol printk type 2 sym 18 at addr 0x20009918 addr 0x8b91
+[00:00:10.302,000] <dbg> llext: llext_link: relocation 2:2 info 110a (type 10, sym 17) offset 82 sym_name philosopher sym_type 2 sym_bind 1 sym_ndx 1
+[00:00:10.316,000] <inf> llext: found section symbol philosopher addr 0x1fff90ec
+[00:00:10.323,000] <inf> llext: relocating (linking) symbol philosopher type 2 binding 1 ndx 1 offset 82 link section 10
+[00:00:10.335,000] <inf> llext: writing relocation symbol philosopher type 10 sym 17 at addr 0x2000993e addr 0x1fff90ec
+[00:00:10.346,000] <dbg> elf: arch_elf_relocate: Unsupported ARM elf relocation type 10 at address 2000993e
+[00:00:10.356,000] <dbg> llext: llext_link: relocation 2:3 info 502 (type 2, sym 5) offset 96 sym_name  sym_type 3 sym_bind 0 sym_ndx 5
+[00:00:10.369,000] <inf> llext: found section symbol  addr 0x20009978
+[00:00:10.376,000] <inf> llext: relocating (linking) symbol  type 3 binding 0 ndx 5 offset 96 link section 10
+[00:00:10.386,000] <inf> llext: writing relocation symbol  type 2 sym 5 at addr 0x2000994c addr 0x20009978
+[00:00:10.396,000] <dbg> llext: llext_link: relocation 2:4 info 1202 (type 2, sym 18) offset 100 sym_name printk sym_type 0 sym_bind 1 sym_ndx 0
+[00:00:10.409,000] <inf> llext: relocating (linking) symbol printk type 0 binding 1 ndx 0 offset 100 link section 10
+[00:00:10.420,000] <inf> llext: writing relocation symbol printk type 2 sym 18 at addr 0x20009950 addr 0x8b91
+[00:00:10.431,000] <dbg> llext: llext_link: relocation 2:5 info 502 (type 2, sym 5) offset 104 sym_name  sym_type 3 sym_bind 0 sym_ndx 5
+[00:00:10.443,000] <inf> llext: found section symbol  addr 0x20009988
+[00:00:10.450,000] <inf> llext: relocating (linking) symbol  type 3 binding 0 ndx 5 offset 104 link section 10
+[00:00:10.461,000] <inf> llext: writing relocation symbol  type 2 sym 5 at addr 0x20009954 addr 0x20009988
+[00:00:10.471,000] <dbg> llext: llext_link: relocation section .rel.exported_sym (7) linked to section 10 has 2 relocations
+[00:00:10.482,000] <dbg> llext: llext_link: relocation 7:0 info 502 (type 2, sym 5) offset 0 sym_name  sym_type 3 sym_bind 0 sym_ndx 5
+[00:00:10.495,000] <inf> llext: found section symbol  addr 0x2000999c
+[00:00:10.501,000] <inf> llext: relocating (linking) symbol  type 3 binding 0 ndx 5 offset 0 link section 10
+[00:00:10.512,000] <inf> llext: writing relocation symbol  type 2 sym 5 at addr 0x200099ac addr 0x2000999c
+[00:00:10.522,000] <dbg> llext: llext_link: relocation 7:1 info 1302 (type 2, sym 19) offset 4 sym_name hello_phil sym_type 2 sym_bind 1 sym_ndx 1
+[00:00:10.535,000] <inf> llext: found section symbol hello_phil addr 0x2000991d
+[00:00:10.543,000] <inf> llext: relocating (linking) symbol hello_phil type 2 binding 1 ndx 1 offset 4 link section 10
+[00:00:10.554,000] <inf> llext: writing relocation symbol hello_phil type 2 sym 19 at addr 0x200099b0 addr 0x2000991d
+[00:00:10.565,000] <dbg> llext: llext_export_symbols: sym 0x2000991d name hello_phil in 0x20009b2c
+[00:00:10.575,000] <dbg> llext: do_llext_load: loaded module, .text at 0x200098ec, .rodata at 0x20009964
+[00:00:10.584,000] <inf> llext: Loaded extension hp
+Successfully loaded extension hp, addr 0x200097ac
+
+[00:00:10.302,000] <dbg> llext: llext_link: relocation 2:2 info 110a (type 10, sym 17) offset 82 sym_name philosopher sym_type 2 sym_bind 1 sym_ndx 1
+[00:00:10.316,000] <inf> llext: found section symbol philosopher addr 0x1fff90ec
+[00:00:10.323,000] <inf> llext: relocating (linking) symbol philosopher type 2 binding 1 ndx 1 offset 82 link section 10
+[00:00:10.335,000] <inf> llext: writing relocation symbol philosopher type 10 sym 17 at addr 0x2000993e addr 0x1fff90ec
+[00:00:10.346,000] <dbg> elf: arch_elf_relocate: Unsupported ARM elf relocation type 10 at address 2000993e
+
+*** https://github.com/angr/cle/blob/8bd270f92db4177194f6a6fe5c7261305fcec2f8/cle/backends/elf/relocation/arm.py#L247
+
+	def _isThumbFunc(symbol, addr):
+    """
+    Checks whether the provided symbol and address is a Thumb function by
+    verifying the LSB is 1 and the symbol is STT_FUNC.
+    """
+    return (addr % 2 == 1) and symbol.is_function
+
+	class R_ARM_THM_CALL(ELFReloc):
+    """
+    Relocate R_ARM_THM_CALL symbols via instruction modification.
+
+    - Class: Static
+    - Type: ARM (R_ARM_THM_CALL)
+    - Code: 10
+    - Operation: ((S + A) | T) - P
+
+      - S is the address of the symbol
+      - A is the addend
+      - P is the target location (place being relocated)
+      - T is 1 if the symbol is of type STT_FUNC and addresses a Thumb instruction (This bit is entirely irrelevant
+        because the 1-bit of the address gets shifted off in the encoding)
+
+    - Encoding: See http://hermes.wings.cs.wisc.edu/files/Thumb-2SupplementReferenceManual.pdf
+
+      - Page 71 (3-31) has the chart
+      - It appears that it mistakenly references the I1 and I2 bits as J1 and J2 in the chart (see the notes at the
+        bottom of the page -- the ranges don't make sense)
+
+      - However, the J1/J2 bits are XORed with !S bit in this case (see vex implementation:
+        https://github.com/angr/vex/blob/6d1252c7ce8fe8376318b8f8bb8034058454c841/priv/guest_arm_toIR.c#L19219 )
+
+      - Implementation appears correct with the bits placed into offset[23:22]
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._insn_bytes = None
+
+    def resolve_symbol(self, solist, **kwargs):
+        kwargs["thumb"] = True
+        super().resolve_symbol(solist, **kwargs)
+
+    @property
+    def value(self):
+        P = self.rebased_addr  # Location of this instruction
+        S = self.resolvedby.rebased_addr  # The symbol's "value", where it points to
+        T = _isThumbFunc(self.symbol, S)
+        A = 0
+
+        # Deconstruct the instruction:
+        #  Because this 4-byte instruction is treated as two 2-byte instructions,
+        #  the bytes are in the order `b3 b4 b1 b2`, where b4 is the most significant.
+
+        if self._insn_bytes is None:
+            self._insn_bytes = self.owner.memory.load(self.relative_addr, 4)
+
+        hi = (self._insn_bytes[1] << 8) | self._insn_bytes[0]
+        lo = (self._insn_bytes[3] << 8) | self._insn_bytes[2]
+        inst = (hi << 16) | lo
+
+        def gen_mask(n_bits, first_bit):
+            """
+            Builds a mask that captures n_bits, where the first bit captured is first_bit
+            """
+            return ((1 << n_bits) - 1) << first_bit
+
+        if self.is_rela:
+            A = self.addend
+        else:
+            # Build A (the initial addend)
+
+            A |= (inst & gen_mask(11, 0)) << 1  # A[11:1]  = inst[10:0] (inclusive)
+            A |= ((inst & gen_mask(10, 16)) >> 16) << 12  # A[21:12] = inst[25:16]
+
+            sign_bit = bool(inst & gen_mask(1, 26)) & 1  # sign_bit = inst[26]
+
+            J1 = (bool(inst & gen_mask(1, 13)) & 1) ^ (not sign_bit)  # J1 = inst[13] ^ !sign
+            J2 = (bool(inst & gen_mask(1, 11)) & 1) ^ (not sign_bit)  # J2 = inst[11] ^ !sign
+
+            A |= J1 << 23  # A[23] = J1
+            A |= J2 << 22  # A[22] = J2
+
+            A &= 0x7FFFFF
+
+            if sign_bit:
+                A |= 0xFF800000
+
+        # Compute X, the new offset, from the symbol addr, S, the addend, A,
+        #  the thumb flag, T, and PC, P.
+
+        x = (((S + A) | T) - P) & 0xFFFFFFFF  # Also mask to 32 bits
+
+        # Ensure jump is in range
+
+        if x & 0xFF800000 != 0 and x & 0xFF800000 != 0xFF800000:
+            raise CLEOperationError(
+                "Jump target out of range for reloc R_ARM_THM_CALL (+- 2^23). "
+                "This may be due to SimProcedures being allocated outside the jump range. "
+                "If you believe this is the case, set 'rebase_granularity'=0x1000 in the "
+                "load options."
+            )
+
+        # Rebuild the instruction, first clearing out any previously set offset bits
+
+        #                 offset     1 2  offset
+        #          11110S [21:12]  11J?J  [11:1]     (if ? is 1, BL; if ? is 0, BLX)
+        inst &= ~0b00000111111111110010111111111111
+        #         |       |       |       |       |
+        #        32      24      16       8       0
+
+        sign_bit = bool(x & gen_mask(1, 24)) & 1
+        J1 = (bool(x & gen_mask(1, 23)) & 1) ^ (not sign_bit)
+        J2 = (bool(x & gen_mask(1, 22)) & 1) ^ (not sign_bit)
+
+        inst |= sign_bit << 26
+        inst |= J1 << 13
+        inst |= J2 << 11
+
+        inst |= (x & gen_mask(11, 1)) >> 1
+        inst |= ((x & gen_mask(10, 12)) >> 12) << 16
+
+        # Put it back into <little endian short> <little endian short> format
+
+        raw = ((inst & 0x00FF0000) >> 16, (inst & 0xFF000000) >> 24, (inst & 0x00FF), (inst & 0xFF00) >> 8)
+
+        # The relocation handler expects a little-endian result, so flip it around.
+
+        result = (raw[3] << 24) | (raw[2] << 16) | (raw[1] << 8) | raw[0]
+
+        log.debug("%s relocated as R_ARM_THM_CALL with new instruction: %#x", self.symbol.name, result)
+        return result
+
+*** Found a way to remove Thumb calls?
+
+	-mthumb / -marm
+
+/	home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -marm -c -I /home/lauren/zephyrproject/zephyr/include -imacros/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated -o /home/lauren/zephyrproject/zephyr/build/hello_phil.llext /home/lauren/zephyrproject/zephyr/tests/subsys/llext/hello_phil/hello_phil.c
+
+https://gcc.gnu.org/onlinedocs/gcc/ARM-Options.html
+
+	Generated R_ARM_V4BX
+
+https://github.com/yifanlu/UVLoader/blob/master/relocate.c#L105
+
+	Did case R_ARM_V4BX but another error prevented me from linking
+
+	[00:00:57.551,000] <dbg> llext: do_llext_load: Allocating memory for symbol table...
+	[00:00:57.559,000] <dbg> llext: do_llext_load: Copying symbols...
+	[00:00:57.566,000] <dbg> llext: llext_copy_symbols: function symbol 0 name philosopher addr 0x200098ec
+	[00:00:57.576,000] <dbg> llext: llext_copy_symbols: function symbol 1 name hello_phil addr 0x20009930
+	[00:00:57.585,000] <dbg> llext: do_llext_load: Linking ELF...
+	[00:00:57.591,000] <dbg> llext: llext_link: relocation section .rel.text (2) linked to section 10 has 11 relocations
+	[00:00:57.602,000] <dbg> llext: llext_link: relocation 2:0 info 28 (type 40, sym 0) offset 40 sym_name  sym_type 0 sym_bind 0 sym_ndx 0
+	[00:00:57.615,000] <err> llext: Undefined symbol with no entry in symbol table , offset 40, link section 10
+	[00:00:57.625,000] <err> llext: Failed to link, ret -61
+	[00:00:57.631,000] <dbg> llext: do_llext_load: Failed to load extension, freeing memory...
+	Failed to load extension hp, return code -61
+
+https://elixir.bootlin.com/linux/latest/source/arch/arm/kernel/module.c#L325
+
+**********************
+
+12/31
+=====
+
+https://gcc.gnu.org/onlinedocs/gcc/ARM-Options.html
+
+-mcpu=cortex-m4
+
+/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -marm -mcpu=cortex-m4 -c -I /home/lauren/zephyrproject/zephyr/include -imacros/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated -o /home/lauren/zephyrproject/zephyr/build/hello_phil.llext /home/lauren/zephyrproject/zephyr/tests/subsys/llext/hello_phil/hello_phil.c
+cc1: error: target CPU does not support ARM mode
+
+/home/lauren/zephyr-sdk-0.16.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc -mlong-calls -mthumb -mcpu=cortex-m4 -c -I /home/lauren/zephyrproject/zephyr/include -imacros/home/lauren/zephyrproject/zephyr/build/zephyr/include/generated/autoconf.h -I /home/lauren/zephyrproject/zephyr/build/zephyr/include/generated -o /home/lauren/zephyrproject/zephyr/build/hello_phil.llext /home/lauren/zephyrproject/zephyr/tests/subsys/llext/hello_phil/hello_phil.c
+
+https://reverseengineering.stackexchange.com/questions/17346/what-is-an-addend
+
+Copying code first Attempt
+
+uart:~$ llext call_fn hp hello_phil
+hello world
+A number is 42
+[00:00:37.866,000] <err> os: ***** BUS FAULT *****
+[00:00:37.872,000] <err> os:   Imprecise data bus error
+[00:00:37.878,000] <err> os: r0/a1:  0x00000000  r1/a2:  0x00000000  r2/a30
+[00:00:37.886,000] <err> os: r3/a4:  0x00000000 r12/ip:  0x00000080 r14/lrf
+[00:00:37.895,000] <err> os:  xpsr:  0x41000000
+[00:00:37.900,000] <err> os: Faulting instruction address (r15/pc): 0x20000
+[00:00:37.908,000] <err> os: >>> ZEPHYR FATAL ERROR 26: Unknown error on C0
+[00:00:37.916,000] <err> os: Current thread: 0x20000130 (shell_uart)
+[00:00:37.923,000] <err> os: Halting system
+
+Jumped to wrong addresss - shell_uart_ctx instead of llext k_heap

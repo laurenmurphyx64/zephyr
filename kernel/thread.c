@@ -736,7 +736,7 @@ k_tid_t z_impl_k_thread_create(struct k_thread *new_thread,
 
 	return new_thread;
 }
-
+EXPORT_SYMBOL(z_impl_k_thread_create);
 
 #ifdef CONFIG_USERSPACE
 bool z_stack_is_user_capable(k_thread_stack_t *stack)

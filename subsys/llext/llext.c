@@ -599,7 +599,7 @@ static void llext_link_plt(struct llext_loader *ldr, struct llext *ext,
 	}
 }
 
-__weak void arch_elf_relocate(elf_rela_t *rel, uintptr_t opaddr, uintptr_t opval)
+__weak void arch_elf_relocate(elf_rela_t *rel, elf_sym_t *sym, uintptr_t opaddr, uintptr_t opval)
 {
 }
 
@@ -710,7 +710,7 @@ static int llext_link(struct llext_loader *ldr, struct llext *ext, bool do_local
 				/* Current relocation location holds an offset into the section */
 				link_addr = (uintptr_t)ext->mem[ldr->sect_map[sym.st_shndx]]
 					+ sym.st_value
-					+ *((uintptr_t *)op_loc);
+					+ *((uintptr_t *)op_loc); /* Implicit addend */
 
 				LOG_INF("found section symbol %s addr 0x%lx", name, link_addr);
 			} else {
@@ -729,7 +729,7 @@ static int llext_link(struct llext_loader *ldr, struct llext *ext, bool do_local
 				op_loc, link_addr);
 
 			/* relocation */
-			arch_elf_relocate(&rel, op_loc, link_addr);
+			arch_elf_relocate(&rel, &sym, op_loc, link_addr);
 		}
 	}
 
@@ -844,7 +844,7 @@ out:
 		}
 		k_heap_free(&llext_heap, ext->exp_tab.syms);
 	} else {
-		LOG_DBG("loaded module, .text at %p, .rodata at %p", ext->mem[LLEXT_MEM_TEXT],
+		LOG_DBG("Loaded module, .text at %p, .rodata at %p", ext->mem[LLEXT_MEM_TEXT],
 			ext->mem[LLEXT_MEM_RODATA]);
 	}
 
@@ -919,7 +919,7 @@ int llext_load(struct llext_loader *ldr, const char *name, struct llext **ext,
 
 		break;
 	default:
-		LOG_ERR("Unsupported elf file type %x", ehdr.e_type);
+		LOG_ERR("Unsupported ELF file type %x", ehdr.e_type);
 		ret = -EINVAL;
 	}
 

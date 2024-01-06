@@ -180,7 +180,7 @@ int llext_call_fn(struct llext *ext, const char *sym_name);
  * @param[in] opaddr Address of operation to rewrite with relocation
  * @param[in] opval Value of looked up symbol to relocate
  */
-void arch_elf_relocate(elf_rela_t *rel, uintptr_t opaddr, uintptr_t opval);
+void arch_elf_relocate(elf_rela_t *rel, elf_sym_t *sym, uintptr_t opaddr, uintptr_t opval);
 
 /**
  * @brief Find an ELF section

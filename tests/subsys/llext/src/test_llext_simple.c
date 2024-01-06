@@ -27,6 +27,11 @@ static uint8_t hello_world_elf[] __aligned(4) = {
  */
 ZTEST(llext, test_llext_simple)
 {
+	for (int i = 1; i <= 10; i++) {
+		printk("%d...\n", i);
+		k_sleep(K_SECONDS(1));
+	}
+	
 	const char name[16] = "hello";
 	struct llext_buf_loader buf_loader =
 		LLEXT_BUF_LOADER(hello_world_elf, ARRAY_SIZE(hello_world_elf));

@@ -13,8 +13,9 @@
 
 #include <stdint.h>
 #include <zephyr/llext/symbol.h>
+#include <zephyr/kernel.h>
 
-extern void printk(char *fmt, ...);
+// extern void printk(char *fmt, ...);
 
 static const uint32_t number = 42;
 
