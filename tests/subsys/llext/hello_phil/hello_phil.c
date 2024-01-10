@@ -23,10 +23,10 @@ void philosopher(void *id, void *unused1, void *unused2)
 {
 	printk("hello phil %d\n", id);
 
-	// // k_sem_take(&sem, K_FOREVER);
+	// k_sem_take(&sem, K_FOREVER);
 	// k_mutex_lock(&mutex, K_NO_WAIT);
 
-	// // k_sem_give(&sem);
+	// k_sem_give(&sem);
 	// k_mutex_unlock(&mutex);
 }
 
@@ -39,6 +39,6 @@ void hello_phil(void)
 				philosopher, INT_TO_POINTER(0), NULL, NULL,
 				0, 0, K_FOREVER);
 
-	philosopher(0, NULL, NULL);
+	// philosopher(0, NULL, NULL);
 }
 LL_EXTENSION_SYMBOL(hello_phil);
