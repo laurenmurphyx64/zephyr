@@ -10,10 +10,10 @@
 
 static const uint32_t number = 42;
 
-#define STACK_SIZE (2048)
+// #define STACK_SIZE (2048)
 
-static struct k_thread thread;
-static K_THREAD_STACK_DEFINE(stack, STACK_SIZE);
+// static struct k_thread thread;
+// static K_THREAD_STACK_DEFINE(stack, STACK_SIZE);
 
 // K_SEM_DEFINE(sem, 0, 5);
 
@@ -35,10 +35,10 @@ void hello_phil(void)
 	printk("hello world\n");
 	printk("A number is %lu\n", number);
 
-	k_thread_create(&thread, stack, STACK_SIZE,
-				philosopher, INT_TO_POINTER(0), NULL, NULL,
-				0, 0, K_FOREVER);
+	// k_thread_create(&thread, stack, STACK_SIZE,
+	// 			philosopher, INT_TO_POINTER(0), NULL, NULL,
+	// 			0, 0, K_FOREVER);
 
-	// philosopher(0, NULL, NULL);
+	philosopher(0, NULL, NULL);
 }
 LL_EXTENSION_SYMBOL(hello_phil);
