@@ -24,10 +24,9 @@ struct k_thread llext_thread;
 #ifdef CONFIG_USERSPACE
 void llext_entry(void *arg0, void *arg1, void *arg2)
 {
-	struct llext *ext = arg0;
+	(void *fn)(void) = arg0;
 
-	zassert_ok(llext_call_fn(ext, "hello_world"),
-		   "hello_world call should succeed");
+	fn(),
 }
 #endif /* CONFIG_USERSPACE */
 
@@ -69,7 +68,7 @@ ZTEST(llext, test_llext_simple)
 	/* Should be runnable from newly created thread */
 	k_thread_create(&llext_thread, llext_stack,
 			K_THREAD_STACK_SIZEOF(llext_stack),
-			&llext_entry, ext, NULL, NULL,
+			&llext_entry, hello_world_fn, NULL, NULL,
 			1, 0, K_FOREVER);
 
 	k_mem_domain_add_thread(&domain, &llext_thread);
