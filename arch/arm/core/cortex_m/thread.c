@@ -19,6 +19,7 @@
 #include <zephyr/sys/barrier.h>
 #include <stdbool.h>
 #include <cmsis_core.h>
+#include <zephyr/llext/symbol.h>
 
 #if (MPU_GUARD_ALIGN_AND_SIZE_FLOAT > MPU_GUARD_ALIGN_AND_SIZE)
 #define FP_GUARD_EXTRA_SIZE	(MPU_GUARD_ALIGN_AND_SIZE_FLOAT - \
