@@ -20,6 +20,7 @@
 #include <zephyr/sys/math_extras.h>
 #include <zephyr/timing/timing.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/llext/symbol.h>
 
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
@@ -1666,6 +1667,7 @@ void z_impl_k_thread_abort(struct k_thread *thread)
 
 	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_thread, abort, thread);
 }
+EXPORT_SYMBOL(z_impl_k_thread_abort);
 #endif
 
 int z_impl_k_thread_join(struct k_thread *thread, k_timeout_t timeout)
@@ -1700,6 +1702,7 @@ int z_impl_k_thread_join(struct k_thread *thread, k_timeout_t timeout)
 	k_spin_unlock(&_sched_spinlock, key);
 	return ret;
 }
+EXPORT_SYMBOL(z_impl_k_thread_join);
 
 #ifdef CONFIG_USERSPACE
 /* Special case: don't oops if the thread is uninitialized.  This is because
