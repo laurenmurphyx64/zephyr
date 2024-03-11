@@ -160,6 +160,11 @@ static LLEXT_CONST uint8_t object_ext[] __aligned(4) = {
 LLEXT_LOAD_UNLOAD(object, true)
 #endif /* ! LOADER_BUILD_ONLY */
 
+static LLEXT_CONST uint8_t threads_kernel_objects_ext[] __aligned(4) = {
+	#include "threads_kernel_objects.inc"
+};
+LLEXT_LOAD_UNLOAD(threads_kernel_objects, true)
+
 /*
  * Ensure that EXPORT_SYMBOL does indeed provide a symbol and a valid address
  * to it.
