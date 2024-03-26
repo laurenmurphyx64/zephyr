@@ -16,32 +16,21 @@
 static struct k_thread my_thread;
 #define STACK_SIZE 1024
 extern void *my_thread_stack;
-// struct k_sem my_sem;
-
-/* Deleting exactly 1 character from any of the test_thread printk
- * statements OR the 2 printk statements before the last
- * in test_entry will cause the test to pass.
- */
+struct k_sem my_sem;
 
 void test_thread(void *arg0, void *arg1, void *arg2)
 {
-	printk("Thread printk 1\n"); 
-	printk("Thread printk 2\n");
-	printk("Thread printk 3\n");
-	// printk("Take semaphore from test thread\n");
-	// k_sem_take(&my_sem, K_FOREVER);
-	// printk("Semaphore taken\n");
+	printk("Take semaphore from test thread\n");
+	k_sem_take(&my_sem, K_FOREVER);
+	printk("Semaphore taken\n");
 }
 
 void test_entry(void)
 {
-	printk("Main printk 1\n");
-	printk("Main printk\n"); // 2
-	printk("M\n"); // ain printk 3
-	// printk("Initialize semaphore with initial count 0 and max 1\n");
-	// k_sem_init(&my_sem, 1, 1);
-	// printk("Give semaphore from main thread\n");
-	// k_sem_give(&my_sem);
+	printk("Initialize semaphore with initial count 0 and max 1\n");
+	k_sem_init(&my_sem, 1, 1);
+	printk("Give semaphore from main thread\n");
+	k_sem_give(&my_sem);
 	
 	printk("Creating thread\n");
 	k_tid_t tid = k_thread_create(&my_thread, my_thread_stack, STACK_SIZE,
