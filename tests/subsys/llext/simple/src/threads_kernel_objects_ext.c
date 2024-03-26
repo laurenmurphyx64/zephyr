@@ -13,10 +13,9 @@
 #include <zephyr/llext/symbol.h>
 #include <zephyr/kernel.h>
 
-#define STACK_SIZE 1024
 static struct k_thread my_thread;
-static K_THREAD_STACK_DEFINE(my_thread_stack, STACK_SIZE);
-
+#define STACK_SIZE 1024
+extern void *my_thread_stack;
 // struct k_sem my_sem;
 
 /* Deleting exactly 1 character from any of the test_thread printk

@@ -7,6 +7,7 @@
 #include <zephyr/ztest.h>
 #include <zephyr/kernel.h>
 #include <zephyr/llext/llext.h>
+#include <zephyr/llext/symbol.h>
 #include <zephyr/llext/buf_loader.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/libc-hooks.h>
@@ -184,6 +185,10 @@ static LLEXT_CONST uint8_t threads_kernel_objects_ext[] __aligned(4) = {
 };
 LLEXT_LOAD_UNLOAD(threads_kernel_objects, true)
 #endif /* ! LOADER_BUILD_ONLY */
+
+#define STACK_SIZE 1024
+K_THREAD_STACK_DEFINE(my_thread_stack, STACK_SIZE);
+EXPORT_SYMBOL(my_thread_stack);
 
 /*
  * Ensure that EXPORT_SYMBOL does indeed provide a symbol and a valid address
