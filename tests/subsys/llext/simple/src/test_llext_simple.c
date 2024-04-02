@@ -29,20 +29,8 @@ struct llext_test {
 	size_t buf_len;
 
 	LLEXT_CONST uint8_t *buf;
+	void (*userspace_setup)(void *);
 };
-
-/* Threads and objects test case */
-#define STACK_SIZE 1024
-K_THREAD_STACK_DEFINE(my_thread_stack, STACK_SIZE);
-EXPORT_SYMBOL(my_thread_stack);
-
-#ifdef CONFIG_USERSPACE
-K_SEM_DEFINE(my_sem_usermode, 1, 1);
-EXPORT_SYMBOL(my_sem_usermode);
-struct k_thread my_thread_usermode;
-EXPORT_SYMBOL(my_thread_usermode);
-#endif
-/**/
 
 
 K_THREAD_STACK_DEFINE(llext_stack, 1024);
@@ -63,7 +51,25 @@ int z_impl_ext_syscall_ok(int a)
 	return a + 1;
 }
 
+/* threads_kernel_objects test */
+#define STACK_SIZE 1024
+K_THREAD_STACK_DEFINE(my_thread_stack, STACK_SIZE);
+EXPORT_SYMBOL(my_thread_stack);
+
 #ifdef CONFIG_USERSPACE
+K_SEM_DEFINE(my_sem_userspace, 1, 1);
+EXPORT_SYMBOL(my_sem_userspace);
+struct k_thread my_thread_userspace;
+EXPORT_SYMBOL(my_thread_userspace);
+
+static void threads_objects_userspace_setup(void *llext_thread)
+{
+	k_object_access_grant(&my_sem_userspace, llext_thread);
+	k_object_access_grant(&my_thread_userspace, llext_thread);
+	k_object_access_grant(&my_thread_stack, llext_thread);
+}
+
+/* syscalls test */
 static inline int z_vrfy_ext_syscall_ok(int a)
 {
 	return z_impl_ext_syscall_ok(a);
@@ -118,13 +124,10 @@ void load_call_unload(struct llext_test *test_case)
 			K_THREAD_STACK_SIZEOF(llext_stack),
 			&llext_entry, test_entry_fn, NULL, NULL,
 			1, 0, K_FOREVER);
-	k_object_access_grant(&my_sem_usermode, &llext_thread);
 	k_mem_domain_add_thread(&domain, &llext_thread);
 
 	k_thread_start(&llext_thread);
 	k_thread_join(&llext_thread, K_FOREVER);
-
-	printk("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa\n");
 
 	/* Some extensions may wish to be tried from the context
 	 * of a userspace thread along with the usual supervisor context
@@ -135,9 +138,9 @@ void load_call_unload(struct llext_test *test_case)
 				K_THREAD_STACK_SIZEOF(llext_stack),
 				&llext_entry, test_entry_fn, NULL, NULL,
 				1, K_USER, K_FOREVER);
-		k_object_access_grant(&my_sem_usermode, &llext_thread);
-		k_object_access_grant(&my_thread_usermode, &llext_thread);
-		k_object_access_grant(&my_thread_stack, &llext_thread);
+		if (test_case->userspace_setup) {
+			test_case->userspace_setup(&llext_thread);
+		}
 		
 		k_mem_domain_add_thread(&domain, &llext_thread);
 
@@ -160,7 +163,7 @@ void load_call_unload(struct llext_test *test_case)
  * unloading each extension which may itself excercise various APIs provided by
  * Zephyr.
  */
-#define LLEXT_LOAD_UNLOAD(_name, _userspace)					\
+#define LLEXT_LOAD_UNLOAD(_name, _userspace, _userspace_setup)					\
 	ZTEST(llext, test_load_unload_##_name)					\
 	{									\
 		struct llext_test test_case = {					\
@@ -168,38 +171,43 @@ void load_call_unload(struct llext_test *test_case)
 			.try_userspace = _userspace,				\
 			.buf_len = ARRAY_SIZE(_name ## _ext),			\
 			.buf = _name ## _ext,					\
+			.userspace_setup = _userspace_setup,					\
 		};								\
 		load_call_unload(&test_case);					\
 	}
 static LLEXT_CONST uint8_t hello_world_ext[] __aligned(4) = {
 	#include "hello_world.inc"
 };
-LLEXT_LOAD_UNLOAD(hello_world, false)
+LLEXT_LOAD_UNLOAD(hello_world, false, NULL)
 
 static LLEXT_CONST uint8_t logging_ext[] __aligned(4) = {
 	#include "logging.inc"
 };
-LLEXT_LOAD_UNLOAD(logging, true)
+LLEXT_LOAD_UNLOAD(logging, true, NULL)
 
 static LLEXT_CONST uint8_t relative_jump_ext[] __aligned(4) = {
 	#include "relative_jump.inc"
 };
-LLEXT_LOAD_UNLOAD(relative_jump, true)
+LLEXT_LOAD_UNLOAD(relative_jump, true, NULL)
 
 static LLEXT_CONST uint8_t object_ext[] __aligned(4) = {
 	#include "object.inc"
 };
-LLEXT_LOAD_UNLOAD(object, true)
+LLEXT_LOAD_UNLOAD(object, true, NULL)
 
 static LLEXT_CONST uint8_t syscalls_ext[] __aligned(4) = {
 	#include "syscalls.inc"
 };
-LLEXT_LOAD_UNLOAD(syscalls, true)
+LLEXT_LOAD_UNLOAD(syscalls, true, NULL)
 
 static LLEXT_CONST uint8_t threads_kernel_objects_ext[] __aligned(4) = {
 	#include "threads_kernel_objects.inc"
 };
-LLEXT_LOAD_UNLOAD(threads_kernel_objects, true)
+#ifdef CONFIG_USERSPACE
+LLEXT_LOAD_UNLOAD(threads_kernel_objects, true, threads_objects_userspace_setup)
+#else
+LLEXT_LOAD_UNLOAD(threads_kernel_objects, true, NULL)
+#endif
 #endif /* ! LOADER_BUILD_ONLY */
 
 
