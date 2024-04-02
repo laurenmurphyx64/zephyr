@@ -31,6 +31,18 @@ struct llext_test {
 	LLEXT_CONST uint8_t *buf;
 };
 
+/* Threads and objects test case */
+#define STACK_SIZE 1024
+K_THREAD_STACK_DEFINE(my_thread_stack, STACK_SIZE);
+EXPORT_SYMBOL(my_thread_stack);
+
+#ifdef CONFIG_USERSPACE
+K_SEM_DEFINE(my_sem_usermode, 1, 1);
+EXPORT_SYMBOL(my_sem_usermode);
+struct k_thread my_thread_usermode;
+EXPORT_SYMBOL(my_thread_usermode);
+#endif
+/**/
 
 
 K_THREAD_STACK_DEFINE(llext_stack, 1024);
@@ -106,11 +118,13 @@ void load_call_unload(struct llext_test *test_case)
 			K_THREAD_STACK_SIZEOF(llext_stack),
 			&llext_entry, test_entry_fn, NULL, NULL,
 			1, 0, K_FOREVER);
-
+	k_object_access_grant(&my_sem_usermode, &llext_thread);
 	k_mem_domain_add_thread(&domain, &llext_thread);
 
 	k_thread_start(&llext_thread);
 	k_thread_join(&llext_thread, K_FOREVER);
+
+	printk("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa\n");
 
 	/* Some extensions may wish to be tried from the context
 	 * of a userspace thread along with the usual supervisor context
@@ -121,13 +135,15 @@ void load_call_unload(struct llext_test *test_case)
 				K_THREAD_STACK_SIZEOF(llext_stack),
 				&llext_entry, test_entry_fn, NULL, NULL,
 				1, K_USER, K_FOREVER);
-
+		k_object_access_grant(&my_sem_usermode, &llext_thread);
+		k_object_access_grant(&my_thread_usermode, &llext_thread);
+		k_object_access_grant(&my_thread_stack, &llext_thread);
+		
 		k_mem_domain_add_thread(&domain, &llext_thread);
 
 		k_thread_start(&llext_thread);
 		k_thread_join(&llext_thread, K_FOREVER);
 	}
-
 
 #else /* CONFIG_USERSPACE */
 	zassert_ok(llext_call_fn(ext, "test_entry"),
@@ -186,9 +202,6 @@ static LLEXT_CONST uint8_t threads_kernel_objects_ext[] __aligned(4) = {
 LLEXT_LOAD_UNLOAD(threads_kernel_objects, true)
 #endif /* ! LOADER_BUILD_ONLY */
 
-#define STACK_SIZE 1024
-K_THREAD_STACK_DEFINE(my_thread_stack, STACK_SIZE);
-EXPORT_SYMBOL(my_thread_stack);
 
 /*
  * Ensure that EXPORT_SYMBOL does indeed provide a symbol and a valid address
