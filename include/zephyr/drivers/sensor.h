@@ -582,15 +582,26 @@ struct sensor_stream_trigger {
 	{                                                                                          \
 		.trigger = (_trigger), .opt = (_opt),                                              \
 	}
-/*
- * Internal data structure used to store information about the IODevice for async reading and
- * streaming sensor data.
+
+/**
+ * @brief Sensor Channel Specification
+ *
+ * A sensor channel specification is a unique identifier per sensor device describing
+ * a measurement channel.
+ */
+struct sensor_chan_spec {
+	uint16_t chan_type; /**< A sensor channel type */
+	uint16_t chan_idx;  /**< A sensor channel index */
+};
+
+/**
+ * @private Internal data structure for one shot sensor reads using RTIO
  */
 struct sensor_read_config {
 	const struct device *sensor;
 	const bool is_streaming;
 	union {
-		enum sensor_channel *const channels;
+		struct sensor_chan_spec *const channels;
 		struct sensor_stream_trigger *const triggers;
 	};
 	size_t count;
@@ -604,7 +615,8 @@ struct sensor_read_config {
  *
  * @code(.c)
  * SENSOR_DT_READ_IODEV(icm42688_accelgyro, DT_NODELABEL(icm42688),
- *     SENSOR_CHAN_ACCEL_XYZ, SENSOR_CHAN_GYRO_XYZ);
+ *     { SENSOR_CHAN_ACCEL_XYZ, 0 },
+ *     { SENSOR_CHAN_GYRO_XYZ, 0 });
  *
  * int main(void) {
  *   sensor_read(&icm42688_accelgyro, &rtio);
