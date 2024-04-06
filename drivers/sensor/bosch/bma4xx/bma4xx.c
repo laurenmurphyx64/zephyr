@@ -34,7 +34,7 @@ static int bma4xx_offset_to_reg_val(const struct sensor_value *val, uint8_t *reg
 /**
  * @brief Set the X, Y, or Z axis offsets.
  */
-static int bma4xx_attr_set_offset(const struct device *dev, enum sensor_channel chan,
+static int bma4xx_attr_set_offset(const struct device *dev, enum sensor_channel ch,
 				  const struct sensor_value *val)
 {
 	struct bma4xx_data *bma4xx = dev->data;
@@ -42,11 +42,11 @@ static int bma4xx_attr_set_offset(const struct device *dev, enum sensor_channel 
 	uint8_t reg_val[3];
 	int rc;
 
-	switch (chan) {
+	switch (ch) {
 	case SENSOR_CHAN_ACCEL_X:
 	case SENSOR_CHAN_ACCEL_Y:
 	case SENSOR_CHAN_ACCEL_Z:
-		reg_addr = BMA4XX_REG_OFFSET_0 + (chan - SENSOR_CHAN_ACCEL_X);
+		reg_addr = BMA4XX_REG_OFFSET_0 + (ch - SENSOR_CHAN_ACCEL_X);
 		rc = bma4xx_offset_to_reg_val(val, &reg_val[0]);
 		if (rc) {
 			return rc;
@@ -202,7 +202,7 @@ static int bma4xx_attr_set_bwp(const struct device *dev, const struct sensor_val
 /**
  * @brief Implement the sensor API attribute set method.
  */
-static int bma4xx_attr_set(const struct device *dev, enum sensor_channel chan,
+static int bma4xx_attr_set(const struct device *dev, enum sensor_channel ch,
 			   enum sensor_attribute attr, const struct sensor_value *val)
 {
 	switch (attr) {
@@ -211,7 +211,7 @@ static int bma4xx_attr_set(const struct device *dev, enum sensor_channel chan,
 	case SENSOR_ATTR_FULL_SCALE:
 		return bma4xx_attr_set_range(dev, val);
 	case SENSOR_ATTR_OFFSET:
-		return bma4xx_attr_set_offset(dev, chan, val);
+		return bma4xx_attr_set_offset(dev, ch, val);
 	case SENSOR_ATTR_CONFIGURATION:
 		/* Use for setting the bandwidth parameter (BWP) */
 		return bma4xx_attr_set_bwp(dev, val);
@@ -343,7 +343,7 @@ static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sq
 	struct bma4xx_data *bma4xx = dev->data;
 
 	const struct sensor_read_config *cfg = iodev_sqe->sqe.iodev->data;
-	const enum sensor_channel *const channels = cfg->channels;
+	const struct sensor_chan_spec *const channels = cfg->channels;
 	const size_t num_channels = cfg->count;
 
 	uint32_t min_buf_len = sizeof(struct bma4xx_encoded_data);
@@ -370,7 +370,11 @@ static int bma4xx_submit_one_shot(const struct device *dev, struct rtio_iodev_sq
 
 	/* Determine what channels we need to fetch */
 	for (int i = 0; i < num_channels; i++) {
-		switch (channels[i]) {
+		if (channels[i].chan_idx != 0) {
+			LOG_ERR("Only channel index 0 supported");
+			return -ENOTSUP;
+		}
+		switch (channels[i].chan_type) {
 		case SENSOR_CHAN_ALL:
 			edata->has_accel = 1;
 #ifdef CONFIG_BMA4XX_TEMPERATURE
@@ -436,18 +440,18 @@ static int bma4xx_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_
  * RTIO decoder
  */
 
-static int bma4xx_decoder_get_frame_count(const uint8_t *buffer, enum sensor_channel channel,
-					  size_t channel_idx, uint16_t *frame_count)
+static int bma4xx_decoder_get_frame_count(const uint8_t *buffer, struct sensor_chan_spec ch,
+					  uint16_t *frame_count)
 {
 	const struct bma4xx_encoded_data *edata = (const struct bma4xx_encoded_data *)buffer;
 	const struct bma4xx_decoder_header *header = &edata->header;
 
-	if (channel_idx != 0) {
+	if (ch.chan_idx != 0) {
 		return -ENOTSUP;
 	}
 
 	if (!header->is_fifo) {
-		switch (channel) {
+		switch (ch.chan_type) {
 		case SENSOR_CHAN_ACCEL_X:
 		case SENSOR_CHAN_ACCEL_Y:
 		case SENSOR_CHAN_ACCEL_Z:
@@ -467,10 +471,10 @@ static int bma4xx_decoder_get_frame_count(const uint8_t *buffer, enum sensor_cha
 	return -ENOTSUP;
 }
 
-static int bma4xx_decoder_get_size_info(enum sensor_channel channel, size_t *base_size,
+static int bma4xx_decoder_get_size_info(struct sensor_chan_spec ch, size_t *base_size,
 					size_t *frame_size)
 {
-	switch (channel) {
+	switch (ch.chan_type) {
 	case SENSOR_CHAN_ACCEL_X:
 	case SENSOR_CHAN_ACCEL_Y:
 	case SENSOR_CHAN_ACCEL_Z:
@@ -487,9 +491,9 @@ static int bma4xx_decoder_get_size_info(enum sensor_channel channel, size_t *bas
 	}
 }
 
-static int bma4xx_get_shift(enum sensor_channel channel, uint8_t accel_fs, int8_t *shift)
+static int bma4xx_get_shift(struct sensor_chan_spec ch, uint8_t accel_fs, int8_t *shift)
 {
-	switch (channel) {
+	switch (ch.chan_type) {
 	case SENSOR_CHAN_ACCEL_X:
 	case SENSOR_CHAN_ACCEL_Y:
 	case SENSOR_CHAN_ACCEL_Z:
@@ -562,9 +566,8 @@ static void bma4xx_convert_raw_temp_to_q31(int8_t raw_val, q31_t *out)
 }
 #endif /* CONFIG_BMA4XX_TEMPERATURE */
 
-static int bma4xx_one_shot_decode(const uint8_t *buffer, enum sensor_channel channel,
-				  size_t channel_idx, uint32_t *fit, uint16_t max_count,
-				  void *data_out)
+static int bma4xx_one_shot_decode(const uint8_t *buffer, struct sensor_chan_spec ch,
+				  uint32_t *fit, uint16_t max_count, void *data_out)
 {
 	const struct bma4xx_encoded_data *edata = (const struct bma4xx_encoded_data *)buffer;
 	const struct bma4xx_decoder_header *header = &edata->header;
@@ -573,11 +576,11 @@ static int bma4xx_one_shot_decode(const uint8_t *buffer, enum sensor_channel cha
 	if (*fit != 0) {
 		return 0;
 	}
-	if (max_count == 0 || channel_idx != 0) {
+	if (max_count == 0 || ch.chan_idx != 0) {
 		return -EINVAL;
 	}
 
-	switch (channel) {
+	switch (ch.chan_type) {
 	case SENSOR_CHAN_ACCEL_X:
 	case SENSOR_CHAN_ACCEL_Y:
 	case SENSOR_CHAN_ACCEL_Z:
@@ -590,7 +593,9 @@ static int bma4xx_one_shot_decode(const uint8_t *buffer, enum sensor_channel cha
 
 		out->header.base_timestamp_ns = edata->header.timestamp;
 		out->header.reading_count = 1;
-		rc = bma4xx_get_shift(SENSOR_CHAN_ACCEL_XYZ, header->accel_fs, &out->shift);
+		rc = bma4xx_get_shift((struct sensor_chan_spec){.chan_type = SENSOR_CHAN_ACCEL_XYZ,
+								.chan_idx = 0},
+				      header->accel_fs, &out->shift);
 		if (rc != 0) {
 			return -EINVAL;
 		}
@@ -628,8 +633,8 @@ static int bma4xx_one_shot_decode(const uint8_t *buffer, enum sensor_channel cha
 	}
 }
 
-static int bma4xx_decoder_decode(const uint8_t *buffer, enum sensor_channel channel,
-				 size_t channel_idx, uint32_t *fit, uint16_t max_count,
+static int bma4xx_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec ch,
+				 uint32_t *fit, uint16_t max_count,
 				 void *data_out)
 {
 	const struct bma4xx_decoder_header *header = (const struct bma4xx_decoder_header *)buffer;
@@ -639,7 +644,7 @@ static int bma4xx_decoder_decode(const uint8_t *buffer, enum sensor_channel chan
 		return -ENOTSUP;
 	}
 
-	return bma4xx_one_shot_decode(buffer, channel, channel_idx, fit, max_count, data_out);
+	return bma4xx_one_shot_decode(buffer, ch, fit, max_count, data_out);
 }
 
 SENSOR_DECODER_API_DT_DEFINE() = {
