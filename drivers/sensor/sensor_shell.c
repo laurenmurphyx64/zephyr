@@ -217,7 +217,7 @@ static enum dynamic_command_context current_cmd_ctx = NONE;
 K_MUTEX_DEFINE(cmd_get_mutex);
 
 /* Crate a single common config for one-shot reading */
-static enum sensor_channel iodev_sensor_shell_channels[SENSOR_CHAN_ALL];
+static struct sensor_chan_spec iodev_sensor_shell_channels[SENSOR_CHAN_ALL];
 static struct sensor_read_config iodev_sensor_shell_read_config = {
 	.sensor = NULL,
 	.is_streaming = false,
@@ -346,7 +346,9 @@ void sensor_shell_processing_callback(int result, uint8_t *buf, uint32_t buf_len
 			continue;
 		}
 
-		rc = decoder->get_size_info(channel, &base_size, &frame_size);
+		struct sensor_chan_spec chan_spec = {channel, 0};
+
+		rc = decoder->get_size_info(chan_spec, &base_size, &frame_size);
 		if (rc != 0) {
 			/* Channel not supported, skipping */
 			continue;
@@ -360,12 +362,10 @@ void sensor_shell_processing_callback(int result, uint8_t *buf, uint32_t buf_len
 			continue;
 		}
 
-		while (decoder->get_frame_count(buf, channel, channel_idx, &frame_count) == 0) {
+		while (decoder->get_frame_count(buf, chan_spec, &frame_count) == 0) {
 			fit = 0;
 			memset(&accumulator_buffer, 0, sizeof(accumulator_buffer));
-			while (decoder->decode(buf, channel, channel_idx, &fit, 1, decoded_buffer) >
-			       0) {
-
+			while (decoder->decode(buf, chan_spec, &fit, 1, decoded_buffer) > 0) {
 				switch (channel) {
 				case SENSOR_CHAN_ACCEL_XYZ:
 				case SENSOR_CHAN_GYRO_XYZ:
@@ -521,12 +521,12 @@ static int cmd_get_sensor(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	if (argc == 2) {
-		/* read all channels */
+		/* read all channel types */
 		for (int i = 0; i < ARRAY_SIZE(iodev_sensor_shell_channels); ++i) {
 			if (SENSOR_CHANNEL_3_AXIS(i)) {
 				continue;
 			}
-			iodev_sensor_shell_channels[count++] = i;
+			iodev_sensor_shell_channels[count++] = (struct sensor_chan_spec){i, 0};
 		}
 	} else {
 		/* read specific channels */
@@ -538,7 +538,8 @@ static int cmd_get_sensor(const struct shell *sh, size_t argc, char *argv[])
 				shell_error(sh, "Failed to read channel (%s)", argv[i]);
 				continue;
 			}
-			iodev_sensor_shell_channels[count++] = chan;
+			iodev_sensor_shell_channels[count++] =
+				(struct sensor_chan_spec){chan, 0};
 		}
 	}
 
@@ -569,7 +570,6 @@ static int cmd_get_sensor(const struct shell *sh, size_t argc, char *argv[])
 
 	return 0;
 }
-
 
 static int cmd_sensor_attr_set(const struct shell *shell_ptr, size_t argc, char *argv[])
 {
