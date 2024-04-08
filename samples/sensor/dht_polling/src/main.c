@@ -8,9 +8,11 @@
 #include <stdlib.h>
 
 #include <zephyr/device.h>
-#include <zephyr/drivers/sensor.h>
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/sensor_data_types.h>
+#include <zephyr/rtio/rtio.h>
 
 #define DHT_ALIAS(i) DT_ALIAS(_CONCAT(dht, i))
 #define DHT_DEVICE(i, _)                                                                 \
@@ -18,6 +20,12 @@
 
 /* Support up to 10 temperature/humidity sensors */
 static const struct device *const sensors[] = {LISTIFY(10, DHT_DEVICE, ())};
+
+SENSOR_DT_READ_IODEV(dht_iodev, DT_ALIAS(dht0), 
+		SENSOR_CHAN_AMBIENT_TEMP,
+		SENSOR_CHAN_HUMIDITY);
+
+RTIO_DEFINE_WITH_MEMPOOL(dht_ctx, 1, 1, 1, 64, 4);
 
 int main(void)
 {
@@ -34,27 +42,34 @@ int main(void)
 		for (size_t i = 0; i < ARRAY_SIZE(sensors); i++) {
 			struct device *dev = (struct device *)sensors[i];
 
-			rc = sensor_sample_fetch(dev);
-			if (rc < 0) {
-				printk("%s: sensor_sample_fetch() failed: %d\n", dev->name, rc);
+			struct sensor_q31_data q31 = {0};
+			uint8_t buf[128];
+			rc = sensor_read(&dht_iodev, &dht_ctx, buf, 128);
+			if (rc != 0) {
+				printk("%s: sensor_read() failed: %d\n", dev->name, rc);
 				return rc;
 			}
+			printf("buf: %f\n", buf[0]);
 
-			struct sensor_value temp;
-			struct sensor_value hum;
+			// const struct sensor_decoder_api *decoder;
+			// struct sensor_q31_data decoded_data;
 
-			rc = sensor_channel_get(dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
-			if (rc == 0) {
-				rc = sensor_channel_get(dev, SENSOR_CHAN_HUMIDITY, &hum);
-			}
-			if (rc != 0) {
-				printf("get failed: %d\n", rc);
-				break;
-			}
+			// rc = sensor_get_decoder(dev, &decoder);
+			// if (rc != 0) {
+			// 	printk("%s: sensor_get_decode() failed: %d\n", dev->name, rc);
+			// 	return rc;
+			// }
+			// struct sensor_decode_context ctx =
+			// 	SENSOR_DECODE_CONTEXT_INIT(decoder, NULL, SENSOR_CHAN_AMBIENT_TEMP, 0);
+			// sensor_decode(&ctx, &decoded_data, 1);
 
-			printk("%16s: temp is %d.%02d °C humidity is %d.%02d %%RH\n",
-							dev->name, temp.val1, temp.val2 / 10000,
-							hum.val1, hum.val2 / 10000);
+			// q31_t temp_q31_t = decoded_data.readings[0].temperature;
+			// int sign = (temp_q31_t & 0x80000000) ? -1 : 1;
+			// uint32_t fraction = temp_q31_t & 0x7FFFFFFF;
+			// double temp = sign * (double) fraction / (double)(1ULL << 31);
+
+			// printk("%16s: temp is %f °C humidity is %f %%RH\n",
+			// 				dev->name, temp, 0.0);
 		}
 		k_msleep(1000);
 	}
