@@ -206,7 +206,7 @@ static void sensor_submit_fallback(const struct device *dev, struct rtio_iodev_s
 			}
 			header->shift = new_shift;
 		}
-
+                                   
 		/*
 		 * Spread the q31 values. This is needed because some channels are 3D. If
 		 * the user specified one of those then num_samples will be 3; and we need to
