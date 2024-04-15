@@ -554,7 +554,7 @@ struct sensor_decode_context {
 	{                                                                                          \
 		.decoder = (decoder_),                                                             \
 		.buffer = (buffer_),                                                               \
-		.channel = {.chan_type = (channel_type_), .chan_idx = (channel_index_)}            \
+		.channel = {.chan_type = (channel_type_), .chan_idx = (channel_index_)},            \
 		.fit = 0,                                                                          \
 	}
 
