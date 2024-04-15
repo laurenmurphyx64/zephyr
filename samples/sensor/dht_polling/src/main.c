@@ -8,9 +8,12 @@
 #include <stdlib.h>
 
 #include <zephyr/device.h>
-#include <zephyr/drivers/sensor.h>
 #include <zephyr/sys/util_macro.h>
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/sensor_data_types.h>
+#include <zephyr/rtio/rtio.h>
+#include <zephyr/dsp/print_format.h>
 
 #define DHT_ALIAS(i) DT_ALIAS(_CONCAT(dht, i))
 #define DHT_DEVICE(i, _)                                                                 \
@@ -18,6 +21,22 @@
 
 /* Support up to 10 temperature/humidity sensors */
 static const struct device *const sensors[] = {LISTIFY(10, DHT_DEVICE, ())};
+
+#define DHT_IODEV(i, _)                                                                     \
+	IF_ENABLED(DT_NODE_EXISTS(DHT_ALIAS(i)), (SENSOR_DT_READ_IODEV(_CONCAT(dht_iodev, i), DHT_ALIAS(i), \
+		{SENSOR_CHAN_AMBIENT_TEMP, 0}, \
+		{SENSOR_CHAN_HUMIDITY, 0})))
+
+LISTIFY(10, DHT_IODEV, (;));
+
+// #define DHT_IODEV_REF(i, _)                                                                  \
+// 	IF_ENABLED(DT_NODE_EXISTS(DHT_ALIAS(i)), (_CONCAT(&dht_iodev, i)), (NULL))
+
+// static struct rtio_iodev *dht_iodev = {LISTIFY(10, DHT_IODEV_REF, (,))};
+
+static struct rtio_iodev *dht_iodev = {&dht_iodev0};
+
+RTIO_DEFINE(dht_ctx, 1, 1);
 
 int main(void)
 {
@@ -34,27 +53,37 @@ int main(void)
 		for (size_t i = 0; i < ARRAY_SIZE(sensors); i++) {
 			struct device *dev = (struct device *)sensors[i];
 
-			rc = sensor_sample_fetch(dev);
-			if (rc < 0) {
-				printk("%s: sensor_sample_fetch() failed: %d\n", dev->name, rc);
+			uint8_t buf[128];
+			rc = sensor_read(&dht_iodev[i], &dht_ctx, buf, 128);
+			if (rc != 0) {
+				printk("%s: sensor_read() failed: %d\n", dev->name, rc);
 				return rc;
 			}
 
-			struct sensor_value temp;
-			struct sensor_value hum;
-
-			rc = sensor_channel_get(dev, SENSOR_CHAN_AMBIENT_TEMP, &temp);
-			if (rc == 0) {
-				rc = sensor_channel_get(dev, SENSOR_CHAN_HUMIDITY, &hum);
-			}
+			const struct sensor_decoder_api *decoder;
+			rc = sensor_get_decoder(dev, &decoder);
 			if (rc != 0) {
-				printf("get failed: %d\n", rc);
-				break;
+				printk("%s: sensor_get_decode() failed: %d\n", dev->name, rc);
+				return rc;
 			}
 
-			printk("%16s: temp is %d.%02d °C humidity is %d.%02d %%RH\n",
-							dev->name, temp.val1, temp.val2 / 10000,
-							hum.val1, hum.val2 / 10000);
+			uint32_t temp_fit = 0;
+			uint8_t temp_buf[64];
+			decoder->decode(buf, (struct sensor_chan_spec) {SENSOR_CHAN_AMBIENT_TEMP, 0},
+					&temp_fit, 1, temp_buf);
+			struct sensor_q31_data *temp_data =
+					(struct sensor_q31_data *)temp_buf;
+
+			uint32_t hum_fit = 0;
+			uint8_t hum_buf[64];
+			decoder->decode(buf, (struct sensor_chan_spec) {SENSOR_CHAN_HUMIDITY, 0},
+					&hum_fit, 1, hum_buf);
+			struct sensor_q31_data *hum_data =
+					(struct sensor_q31_data *)hum_buf;
+
+			printk("%16s: temp is %s%d.%d °C humidity is %s%d.%d RH\n", dev->name,
+				PRIq_arg(temp_data->readings[0].temperature, 2, temp_data->shift),
+				PRIq_arg(hum_data->readings[0].humidity, 2, hum_data->shift));
 		}
 		k_msleep(1000);
 	}
