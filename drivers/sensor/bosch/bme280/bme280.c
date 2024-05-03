@@ -26,38 +26,6 @@ LOG_MODULE_REGISTER(BME280, CONFIG_SENSOR_LOG_LEVEL);
 #warning "BME280 driver enabled without any devices"
 #endif
 
-struct bme280_data {
-	/* Compensation parameters. */
-	uint16_t dig_t1;
-	int16_t dig_t2;
-	int16_t dig_t3;
-	uint16_t dig_p1;
-	int16_t dig_p2;
-	int16_t dig_p3;
-	int16_t dig_p4;
-	int16_t dig_p5;
-	int16_t dig_p6;
-	int16_t dig_p7;
-	int16_t dig_p8;
-	int16_t dig_p9;
-	uint8_t dig_h1;
-	int16_t dig_h2;
-	uint8_t dig_h3;
-	int16_t dig_h4;
-	int16_t dig_h5;
-	int8_t dig_h6;
-
-	/* Compensated values. */
-	int32_t comp_temp;
-	uint32_t comp_press;
-	uint32_t comp_humidity;
-
-	/* Carryover between temperature and pressure/humidity compensation. */
-	int32_t t_fine;
-
-	uint8_t chip_id;
-};
-
 struct bme280_config {
 	union bme280_bus bus;
 	const struct bme280_bus_io *bus_io;
@@ -166,10 +134,10 @@ static int bme280_wait_until_ready(const struct device *dev)
 	return 0;
 }
 
-static int bme280_sample_fetch(const struct device *dev,
-			       enum sensor_channel chan)
+int bme280_sample_fetch_helper(const struct device *dev,
+			       enum sensor_channel chan, struct bme280_data *data)
 {
-	struct bme280_data *data = dev->data;
+	struct bme280_data *dev_data = dev->data;
 	uint8_t buf[8];
 	int32_t adc_press, adc_temp, adc_humidity;
 	int size = 6;
@@ -197,7 +165,7 @@ static int bme280_sample_fetch(const struct device *dev,
 		return ret;
 	}
 
-	if (data->chip_id == BME280_CHIP_ID) {
+	if (dev_data->chip_id == BME280_CHIP_ID) {
 		size = 8;
 	}
 	ret = bme280_reg_read(dev, BME280_REG_PRESS_MSB, buf, size);
@@ -208,15 +176,24 @@ static int bme280_sample_fetch(const struct device *dev,
 	adc_press = (buf[0] << 12) | (buf[1] << 4) | (buf[2] >> 4);
 	adc_temp = (buf[3] << 12) | (buf[4] << 4) | (buf[5] >> 4);
 
-	bme280_compensate_temp(data, adc_temp);
-	bme280_compensate_press(data, adc_press);
+	bme280_compensate_temp(dev_data, adc_temp);
+	bme280_compensate_press(dev_data, adc_press);
 
-	if (data->chip_id == BME280_CHIP_ID) {
+	if (dev_data->chip_id == BME280_CHIP_ID) {
 		adc_humidity = (buf[6] << 8) | buf[7];
-		bme280_compensate_humidity(data, adc_humidity);
+		bme280_compensate_humidity(dev_data, adc_humidity);
 	}
 
+	data->comp_temp = dev_data->comp_temp;
+	data->comp_press = dev_data->comp_press;
+	data->comp_humidity = dev_data->comp_humidity;
+
 	return 0;
+}
+
+int bme280_sample_fetch(const struct device *dev, enum sensor_channel chan)
+{
+	return bme280_sample_fetch_helper(dev, chan, dev->data);
 }
 
 static int bme280_channel_get(const struct device *dev,
@@ -267,6 +244,10 @@ static int bme280_channel_get(const struct device *dev,
 static const struct sensor_driver_api bme280_api_funcs = {
 	.sample_fetch = bme280_sample_fetch,
 	.channel_get = bme280_channel_get,
+#ifdef CONFIG_SENSOR_ASYNC_API
+	.submit = bme280_submit,
+	.get_decoder = bme280_get_decoder,
+#endif
 };
 
 static int bme280_read_compensation(const struct device *dev)
