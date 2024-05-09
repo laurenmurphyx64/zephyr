@@ -37,27 +37,44 @@ static int bme280_decoder_get_size_info(struct sensor_chan_spec chan_spec, size_
 #define BME280_PRESS_SHIFT (24)
 #define BME280_TEMP_SHIFT (24)
 
+static void bme280_convert_double_to_q31(double reading, int32_t shift, q31_t *out) {
+	reading = reading * pow(2, 31 - shift);
+
+	int64_t reading_round = (reading < 0) ? (reading - 0.5) : (reading + 0.5);
+	int32_t reading_q31 = CLAMP(reading_round, INT32_MIN, INT32_MAX);
+
+	if (reading_q31 < 0) {
+		reading_q31 = abs(reading_q31);
+		reading_q31 = ~reading_q31;
+		reading_q31++;
+	}
+
+	*out = reading_q31;
+}
+
 static void bme280_convert_signed_temp_raw_to_q31(int32_t reading, q31_t *out)
 {
 	double temp_double = reading / 100.0;
 
-	temp_double = temp_double * pow(2, 31 - BME280_TEMP_SHIFT);
-
-	int64_t temp_round = (temp_double < 0) ? (temp_double - 0.5) : (temp_double + 0.5);
-	int32_t temp = CLAMP(temp_round, INT32_MIN, INT32_MAX);
-
-	if (temp < 0) {
-		temp = abs(temp);
-		temp = ~temp;
-		temp++;
-	}
-
-	*out = temp;
+	bme280_convert_double_to_q31(temp_double, BME280_TEMP_SHIFT, out);
 }
 
-static void bme280_convert_uq32_to_q31(uint32_t reading, q31_t *out)
+static void bme280_convert_unsigned_humidity_raw_to_q31(uint32_t reading, q31_t *out)
 {
-	*out = 0xEFFF & reading;
+	double hum_double = (reading / 1024.0);
+
+	bme280_convert_double_to_q31(hum_double, BME280_HUM_SHIFT, out);
+}
+
+static void bme280_convert_unsigned_pressure_raw_to_q31(uint32_t reading, q31_t *out)
+{
+	double press_double = (reading / 256);
+
+	double val1 = (reading >> 8) / 1000U;
+	double val2 = (reading >> 8) % 1000 * 1000U +
+			(((reading & 0xff) * 1000U) >> 8);
+
+	bme280_convert_double_to_q31(press_double, BME280_PRESS_SHIFT, out);
 }
 
 static int bme280_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec chan_spec,
@@ -81,12 +98,12 @@ static int bme280_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec 
 		out->shift = BME280_TEMP_SHIFT;
 		break;
 	case SENSOR_CHAN_PRESS:
-		bme280_convert_uq32_to_q31(edata->data.comp_press,
+		bme280_convert_unsigned_pressure_raw_to_q31(edata->data.comp_press,
 			&out->readings[0].pressure);
 		out->shift = BME280_PRESS_SHIFT;
 		break;
 	case SENSOR_CHAN_HUMIDITY:
-		bme280_convert_uq32_to_q31(edata->data.comp_humidity,
+		bme280_convert_unsigned_humidity_raw_to_q31(edata->data.comp_humidity,
 			&out->readings[0].humidity);
 		out->shift = BME280_HUM_SHIFT;
 		break;

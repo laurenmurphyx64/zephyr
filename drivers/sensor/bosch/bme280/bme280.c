@@ -97,6 +97,7 @@ static void bme280_compensate_press(struct bme280_data *data, int32_t adc_press)
 	p = ((p + var1 + var2) >> 8) + (((int64_t)data->dig_p7) << 4);
 
 	data->comp_press = (uint32_t)p;
+	printk("comp_pressure reading: %u %xd\n", data->comp_press, data->comp_press);
 }
 
 static void bme280_compensate_humidity(struct bme280_data *data,
@@ -115,6 +116,7 @@ static void bme280_compensate_humidity(struct bme280_data *data,
 	h = (h > 419430400 ? 419430400 : h);
 
 	data->comp_humidity = (uint32_t)(h >> 12);
+	printk("comp_humidity reading: %u %x\n", data->comp_humidity, data->comp_humidity);
 }
 
 static int bme280_wait_until_ready(const struct device *dev)
