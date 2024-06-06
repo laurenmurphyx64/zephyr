@@ -160,7 +160,8 @@ extern const struct bme280_bus_io bme280_bus_io_i2c;
 					 BME280_TEMP_OVER |  \
 					 BME280_MODE_SLEEP)
 
-struct bme280_data {
+/* Private to driver */
+struct bme280_metadata {
 	/* Compensation parameters. */
 	uint16_t dig_t1;
 	int16_t dig_t2;
@@ -181,15 +182,17 @@ struct bme280_data {
 	int16_t dig_h5;
 	int8_t dig_h6;
 
-	/* Compensated values. */
-	int32_t comp_temp;
-	uint32_t comp_press;
-	uint32_t comp_humidity;
-
 	/* Carryover between temperature and pressure/humidity compensation. */
 	int32_t t_fine;
 
 	uint8_t chip_id;
+};
+
+struct bme280_data {
+	/* Compensated values. */
+	int32_t comp_temp;
+	uint32_t comp_press;
+	uint32_t comp_humidity;
 };
 
 /*
