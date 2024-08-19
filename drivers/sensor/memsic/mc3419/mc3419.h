@@ -14,19 +14,19 @@
 #include <zephyr/sys/util.h>
 
 /* Registers */
-#define MC3419_REG_INT_CTRL		0x06
-#define MC3419_REG_OP_MODE		0x07
-#define MC3419_REG_SAMPLE_RATE		0x08
-#define MC3419_REG_MOTION_CTRL		0x09
-#define MC3419_REG_XOUT_L		0x0D
-#define MC3419_REG_YOUT_L		0x0F
-#define MC3419_REG_ZOUT_L		0x11
-#define MC3419_REG_STATUS		0x13
-#define MC3419_REG_INT_STATUS		0x14
-#define MC3419_REG_RANGE_SELECT_CTRL	0x20
-#define MC3419_REG_SAMPLE_RATE_2	0x30
-#define MC3419_REG_COMM_CTRL		0x31
-#define MC3419_REG_ANY_MOTION_THRES	0x43
+#define MC3419_REG_INT_CTRL          0x06
+#define MC3419_REG_OP_MODE           0x07
+#define MC3419_REG_SAMPLE_RATE       0x08
+#define MC3419_REG_MOTION_CTRL       0x09
+#define MC3419_REG_XOUT_L            0x0D
+#define MC3419_REG_YOUT_L            0x0F
+#define MC3419_REG_ZOUT_L            0x11
+#define MC3419_REG_STATUS            0x13
+#define MC3419_REG_INT_STATUS        0x14
+#define MC3419_REG_RANGE_SELECT_CTRL 0x20
+#define MC3419_REG_SAMPLE_RATE_2     0x30
+#define MC3419_REG_COMM_CTRL         0x31
+#define MC3419_REG_ANY_MOTION_THRES  0x43
 
 #define MC3419_RANGE_MASK		GENMASK(6, 4)
 #define MC3419_LPF_MASK                 GENMASK(3, 0)
@@ -35,17 +35,17 @@
 #define MC3419_INT_CLEAR		0x00
 #define MC3419_INT_ROUTE		0x10
 
-#define MC3419_ANY_MOTION_THRESH_MAX	0x7FFF
-#define MC3419_SAMPLE_SIZE		3
-#define MC3419_SAMPLE_READ_SIZE		(MC3419_SAMPLE_SIZE * (sizeof(int16_t)))
+#define MC3419_ANY_MOTION_THRESH_MAX 0x7FFF
+#define MC3419_SAMPLE_SIZE           3
+#define MC3419_SAMPLE_READ_SIZE      (MC3419_SAMPLE_SIZE * (sizeof(int16_t)))
 
-#define SENSOR_GRAIN_VALUE             (61LL / 1000.0)
-#define SENSOR_GRAVITY_DOUBLE          (SENSOR_G / 1000000.0)
-#define MC3419_BASE_ODR_VAL		0x10
+#define SENSOR_GRAIN_VALUE    (61LL / 1000.0)
+#define SENSOR_GRAVITY_DOUBLE (SENSOR_G / 1000000.0)
+#define MC3419_BASE_ODR_VAL   0x10
 
-#define MC3419_TRIG_DATA_READY		0
-#define MC3419_TRIG_ANY_MOTION		1
-#define MC3419_TRIG_SIZE		2
+#define MC3419_TRIG_DATA_READY 0
+#define MC3419_TRIG_ANY_MOTION 1
+#define MC3419_TRIG_SIZE       2
 
 enum mc3419_op_mode {
 	MC3419_MODE_STANDBY = 0x00,
@@ -97,8 +97,7 @@ struct mc3419_driver_data {
 
 #if defined(CONFIG_MC3419_TRIGGER)
 int mc3419_trigger_init(const struct device *dev);
-int mc3419_configure_trigger(const struct device *dev,
-			     const struct sensor_trigger *trig,
+int mc3419_configure_trigger(const struct device *dev, const struct sensor_trigger *trig,
 			     sensor_trigger_handler_t handler);
 #endif
 
