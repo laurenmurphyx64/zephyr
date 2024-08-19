@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Copyright (c) 2024 Intel
+
+config MMC56X3
+	bool "Memsic MMC56X3 magnetometer driver"
+	default y
+	depends on DT_HAS_MEMSIC_MMC56X3_ENABLED
+	select I2C if $(dt_compat_on_bus,$(DT_COMPAT_MEMSIC_MMC56X3),i2c)
+	help
+	 Enable driver for MMC56X3 magnetometer and temperature sensor.
+
+if MMC56X3
+
+choice
+	prompt "MMC56X3 magnetometer X-axis output"
+	default MMC56X3_MAGN_X_16_BIT
+	help
+	  Select number of bits for X axis of magnetometer reading.
+config MMC56X3_MAGN_X_16_BIT
+	bool "16"
+config  MMC56X3_MAGN_X_18_BIT
+	bool "18"
+config  MMC56X3_MAGN_X_20_BIT
+	bool "20"
+endchoice
+
+endif # MMC56X3
