@@ -1,0 +1,33 @@
+sample:
+  name: MMC56X3 Sensor sample
+tests:
+  sample.sensor.mmc56x3:
+    harness: console
+    tags: sensors
+    platform_allow:
+      - frdm_k64f
+    integration_platforms:
+      - frdm_k64f
+    extra_args: "DTC_OVERLAY_FILE=arduino_i2c.overlay"
+    harness_config:
+      type: multi_line
+      ordered: false
+      regex:
+        - "mmc56x3(.*): (.*) C"
+        - "mmc56x3(.*): MX=(.*) MY=(.*) MZ=(.*)"
+  sample.sensor.mmc56x3.old_api:
+    harness: console
+    tags: sensors
+    platform_allow:
+      - frdm_k64f
+    integration_platforms:
+      - frdm_k64f
+    extra_configs:
+      - CONFIG_SENSOR_ASYNC_API=n
+    extra_args: "DTC_OVERLAY_FILE=arduino_i2c.overlay"
+    harness_config:
+      type: multi_line
+      ordered: false
+      regex:
+        - "mmc56x3(.*): (.*) C"
+        - "mmc56x3(.*): MX=(.*) MY=(.*) MZ=(.*)"

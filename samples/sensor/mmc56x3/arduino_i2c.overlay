@@ -1,0 +1,22 @@
+/*
+ * Copyright (c) 2024 Intel
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+
+/*
+ * Example configuration of a MMC56X3 device on an Arduino I2C bus.
+ *
+ * Device address 0x30 is assumed. Your device may have a different
+ * address; check your device documentation if unsure.
+ */
+&arduino_i2c {
+	status = "okay";
+	mmc56x3: mmc56x3@30 {
+		compatible = "memsic,mmc56x3";
+		reg = <0x30>;
+		magn-odr = <0>;
+		auto-self-reset;
+	};
+};
