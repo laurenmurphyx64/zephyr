@@ -38,7 +38,11 @@ static int mmc56x3_decoder_get_frame_count(const uint8_t *buffer, struct sensor_
 		return ret;
 	}
 
-	return 0;
+	if (*frame_count > 0) {
+		ret = 0;
+	}
+
+	return ret;
 }
 
 static int mmc56x3_decoder_get_size_info(struct sensor_chan_spec chan_spec, size_t *base_size,
@@ -46,11 +50,11 @@ static int mmc56x3_decoder_get_size_info(struct sensor_chan_spec chan_spec, size
 {
 	switch (chan_spec.chan_type) {
 	case SENSOR_CHAN_AMBIENT_TEMP:
-		*base_size = sizeof(struct sensor_q31_sample_data);
-		*frame_size = sizeof(struct sensor_q31_sample_data);
 	case SENSOR_CHAN_MAGN_X:
 	case SENSOR_CHAN_MAGN_Y:
 	case SENSOR_CHAN_MAGN_Z:
+		*base_size = sizeof(struct sensor_q31_sample_data);
+		*frame_size = sizeof(struct sensor_q31_sample_data);
 	case SENSOR_CHAN_MAGN_XYZ:
 		*base_size = sizeof(struct sensor_three_axis_data);
 		*frame_size = sizeof(struct sensor_three_axis_sample_data);
@@ -72,11 +76,11 @@ static int mmc56x3_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec
 
 	switch (chan_spec.chan_type) {
 	case SENSOR_CHAN_AMBIENT_TEMP:
-		struct sensor_q31_data *out = data_out;
-
-		out->header.base_timestamp_ns = edata->header.timestamp;
-		out->header.reading_count = 1;
 		if (edata->has_temp) {
+			struct sensor_q31_data *out = data_out;
+
+			out->header.base_timestamp_ns = edata->header.timestamp;
+			out->header.reading_count = 1;
 			out->readings[0].temperature = MMC56X3_TEMP_CONV_Q7_24_BASE +
 						       data->temp * MMC56X3_TEMP_CONV_Q7_24_RES;
 			out->shift = MMC56X3_TEMP_SHIFT;
@@ -85,18 +89,53 @@ static int mmc56x3_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec
 		}
 		break;
 	case SENSOR_CHAN_MAGN_X:
+		if (edata->has_magn_x) {
+			struct sensor_q31_data *out = data_out;
+
+			out->header.base_timestamp_ns = edata->header.timestamp;
+			out->header.reading_count = 1;
+			out->readings[0].value = data->magn_x * MMC56X3_MAGN_CONV_Q5_26_20B;
+			out->shift = MMC56X3_MAGN_SHIFT;
+		} else {
+			return -ENODATA;
+		}
 	case SENSOR_CHAN_MAGN_Y:
+		if (edata->has_magn_y) {
+			struct sensor_q31_data *out = data_out;
+
+			out->header.base_timestamp_ns = edata->header.timestamp;
+			out->header.reading_count = 1;
+			out->readings[0].value = data->magn_y * MMC56X3_MAGN_CONV_Q5_26_20B;
+			out->shift = MMC56X3_MAGN_SHIFT;
+		} else {
+			return -ENODATA;
+		}
 	case SENSOR_CHAN_MAGN_Z:
+		if (edata->has_magn_z) {
+			struct sensor_q31_data *out = data_out;
+
+			out->header.base_timestamp_ns = edata->header.timestamp;
+			out->header.reading_count = 1;
+			out->readings[0].value = data->magn_z * MMC56X3_MAGN_CONV_Q5_26_20B;
+			out->shift = MMC56X3_MAGN_SHIFT;
+		} else {
+			return -ENODATA;
+		}
 	case SENSOR_CHAN_MAGN_XYZ: {
-		struct sensor_three_axis_data *out_3 = data_out;
+		if (edata->has_magn_x && edata->has_magn_y && edata->has_magn_z) {
+			struct sensor_three_axis_data *out_3 = data_out;
 
-		out_3->header.base_timestamp_ns = edata->header.timestamp;
-		out_3->header.reading_count = 1;
-		out_3->shift = MMC56X3_MAGN_SHIFT;
+			out_3->header.base_timestamp_ns = edata->header.timestamp;
+			out_3->header.reading_count = 1;
+			out_3->shift = MMC56X3_MAGN_SHIFT;
 
-		out_3->readings[0].x = data->magn_x * MMC56X3_MAGN_CONV_Q5_26_20B;
-		out_3->readings[0].y = data->magn_y * MMC56X3_MAGN_CONV_Q5_26_20B;
-		out_3->readings[0].z = data->magn_z * MMC56X3_MAGN_CONV_Q5_26_20B;
+			out_3->readings[0].v[0] = data->magn_x * MMC56X3_MAGN_CONV_Q5_26_20B;
+			out_3->readings[0].v[1] = data->magn_y * MMC56X3_MAGN_CONV_Q5_26_20B;
+			out_3->readings[0].v[2] = data->magn_z * MMC56X3_MAGN_CONV_Q5_26_20B;
+		} else {
+			return -ENODATA;
+		}
+		break;
 	}
 	default:
 		return -EINVAL;

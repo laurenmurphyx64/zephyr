@@ -61,9 +61,8 @@ void mmc56x3_submit_sync(struct rtio_iodev_sqe *iodev_sqe)
 			edata->has_magn_z = 1;
 			break;
 		default:
-			LOG_ERR("Unsupported channel type %d", channels[i].chan_type);
-			rtio_iodev_sqe_err(iodev_sqe, -ENOTSUP);
-			return;
+			continue;
+			break;
 		}
 	}
 

@@ -170,7 +170,7 @@ static int mmc56x3_chip_init(const struct device *dev)
 
 	ret = mmc56x3_reg_write(dev, MMC56X3_REG_INTERNAL_CTRL_1, MMC56X3_CMD_SW_RESET);
 	if (ret < 0) {
-		LOG_DBG("SW retet failed: %d", ret);
+		LOG_DBG("SW reset failed: %d", ret);
 	}
 
 	k_sleep(K_MSEC(20));
