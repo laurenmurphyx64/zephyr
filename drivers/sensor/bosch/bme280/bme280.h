@@ -89,7 +89,7 @@ extern const struct bme280_bus_io bme280_bus_io_i2c;
  * = reading * 4.096
  */
 #define BME280_PRESS_CONV_Q11_20 4
-#define BME280_PRESS_SHIFT       11
+#define BME280_PRESS_SHIFT       23
 /* (0, 100)
  * To convert reading from UQ22.10 to Q7.24 with range
  * -128, 128,

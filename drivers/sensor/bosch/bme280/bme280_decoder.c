@@ -71,7 +71,7 @@ static int bme280_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec 
 	case SENSOR_CHAN_AMBIENT_TEMP:
 		if (edata->has_temp) {
 			out->readings[0].temperature =
-				edata->reading.comp_temp * BME280_TEMP_CONV_Q7_24;
+				edata->reading.comp_temp * 16777216 / 100;
 			out->shift = BME280_TEMP_SHIFT;
 		} else {
 			return -ENODATA;
@@ -80,7 +80,7 @@ static int bme280_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec 
 	case SENSOR_CHAN_PRESS:
 		if (edata->has_press) {
 			out->readings[0].pressure =
-				edata->reading.comp_press * BME280_PRESS_CONV_Q11_20;
+				edata->reading.comp_press;
 			out->shift = BME280_PRESS_SHIFT;
 		} else {
 			return -ENODATA;
