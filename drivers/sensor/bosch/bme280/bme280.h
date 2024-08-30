@@ -74,30 +74,17 @@ extern const struct bme280_bus_io bme280_bus_io_i2c;
 #define BME280_STATUS_MEASURING 0x08
 #define BME280_STATUS_IM_UPDATE 0x01
 
-/* (min, max) temp device can measure is (-40, 85 C)
- * To convert reading to Q7.24 with range -128, 128,
- * (reading * RES) * pow(2, 31) / 128
- * = (reading * .01) * pow(2, 31) / 128
- * = reading * 167772.16
+/* Convert to Q15.16 */
+#define BME280_TEMP_RES          100
+#define BME280_TEMP_SHIFT        16
+/* Treat UQ24.8 as Q23.8
+ * Need to divide by 1000 to convert to kPa
  */
-#define BME280_TEMP_CONV_Q7_24   167772
-#define BME280_TEMP_SHIFT        7
-/* (300, 1100 hPa)
- * To convert reading from UQ24.8 to Q11.20 with range
- * -2048 to 2048,
- * = (reading / 256 / 1000 (to hPa)) * pow(2, 31) / 2048
- * = reading * 4.096
- */
-#define BME280_PRESS_CONV_Q11_20 4
+#define BME280_PRESS_CONV_KPA    1/1000
 #define BME280_PRESS_SHIFT       23
-/* (0, 100)
- * To convert reading from UQ22.10 to Q7.24 with range
- * -128, 128,
- * (reading / 1024) * pow(2, 31) / 128
- * = reading * 16384
- */
-#define BME280_HUM_CONV_Q7_24    16384
-#define BME280_HUM_SHIFT         7
+/* Treat UQ22.10 as Q21.10 */
+#define BME280_HUM_SHIFT         21
+
 
 #if defined CONFIG_BME280_MODE_NORMAL
 #define BME280_MODE BME280_MODE_NORMAL

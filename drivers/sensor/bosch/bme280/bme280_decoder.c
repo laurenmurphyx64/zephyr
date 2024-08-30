@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "bme280.h"
 #include <math.h>
+#include <inttypes.h>
+
+#include "bme280.h"
 
 static int bme280_decoder_get_frame_count(const uint8_t *buffer, struct sensor_chan_spec chan_spec,
 					  uint16_t *frame_count)
@@ -70,17 +72,21 @@ static int bme280_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec 
 	switch (chan_spec.chan_type) {
 	case SENSOR_CHAN_AMBIENT_TEMP:
 		if (edata->has_temp) {
-			out->readings[0].temperature =
-				edata->reading.comp_temp * 16777216 / 100;
+			int32_t readq = edata->reading.comp_temp * pow(2, 31 - BME280_TEMP_SHIFT);
+			int32_t resq = BME280_TEMP_RES * pow(2, 31 - BME280_TEMP_SHIFT);
+			out->readings[0].temperature = 
+				(int32_t)((((int64_t) readq) << (31 - BME280_TEMP_SHIFT)) / ((int64_t) resq));
 			out->shift = BME280_TEMP_SHIFT;
+			// printk("comp_temp: %d\n", edata->reading.comp_temp);
+			// printk("q31: %d %x\n", out->readings[0].temperature, out->readings[0].temperature);
 		} else {
 			return -ENODATA;
 		}
 		break;
 	case SENSOR_CHAN_PRESS:
 		if (edata->has_press) {
-			out->readings[0].pressure =
-				edata->reading.comp_press;
+			out->readings[0].pressure = 
+				edata->reading.comp_press * BME280_PRESS_CONV_KPA;
 			out->shift = BME280_PRESS_SHIFT;
 		} else {
 			return -ENODATA;
@@ -88,8 +94,7 @@ static int bme280_decoder_decode(const uint8_t *buffer, struct sensor_chan_spec 
 		break;
 	case SENSOR_CHAN_HUMIDITY:
 		if (edata->has_humidity) {
-			out->readings[0].humidity =
-				edata->reading.comp_humidity * BME280_HUM_CONV_Q7_24;
+			out->readings[0].humidity = edata->reading.comp_humidity;
 			out->shift = BME280_HUM_SHIFT;
 		} else {
 			return -ENODATA;
