@@ -75,12 +75,12 @@ extern const struct bme280_bus_io bme280_bus_io_i2c;
 #define BME280_STATUS_IM_UPDATE 0x01
 
 /* Convert to Q15.16 */
-#define BME280_TEMP_RES          100
+#define BME280_TEMP_CONV         100
 #define BME280_TEMP_SHIFT        16
 /* Treat UQ24.8 as Q23.8
  * Need to divide by 1000 to convert to kPa
  */
-#define BME280_PRESS_CONV_KPA    1/1000
+#define BME280_PRESS_CONV_KPA    1000
 #define BME280_PRESS_SHIFT       23
 /* Treat UQ22.10 as Q21.10 */
 #define BME280_HUM_SHIFT         21
