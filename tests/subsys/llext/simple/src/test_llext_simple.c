@@ -407,7 +407,7 @@ ZTEST(llext, test_find_section)
 	ssize_t section_ofs;
 
 	struct llext_buf_loader buf_loader =
-		LLEXT_BUF_LOADER(find_section_ext, sizeof(find_section_ext));
+		LLEXT_BUF_LOADER(find_section_ext, ARRAY_SIZE(find_section_ext));
 	struct llext_loader *loader = &buf_loader.loader;
 	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
 	struct llext *ext = NULL;

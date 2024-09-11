@@ -106,6 +106,7 @@ static int llext_load_elf_data(struct llext_loader *ldr, struct llext *ext)
 	ldr->sect_cnt = ldr->hdr.e_shnum;
 
 	size_t sect_map_sz = ldr->sect_cnt * sizeof(ldr->sect_map[0]);
+	LOG_DBG("****** ldr->sect_cnt: %d\n", ldr->sect_cnt);
 
 	ldr->sect_map = llext_alloc(sect_map_sz);
 	if (!ldr->sect_map) {
@@ -539,6 +540,9 @@ static int llext_export_symbols(struct llext_loader *ldr, struct llext *ext)
 		exp_tab->syms[i].name = sym->name;
 		exp_tab->syms[i].addr = sym->addr;
 		LOG_DBG("sym %p name %s in %p", sym->addr, sym->name, exp_tab->syms + i);
+		LOG_DBG("sym %p", sym->addr);
+		LOG_DBG("name %s", sym->name);
+		LOG_DBG("in %p", exp_tab->syms);
 	}
 
 	return 0;
@@ -718,6 +722,7 @@ int do_llext_load(struct llext_loader *ldr, struct llext *ext,
 		goto out;
 	}
 
+	LOG_DBG("Exporting symbols...");
 	ret = llext_export_symbols(ldr, ext);
 	if (ret != 0) {
 		LOG_ERR("Failed to export, ret %d", ret);
