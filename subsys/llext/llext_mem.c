@@ -117,7 +117,7 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	/*
 	 * Calculate the desired region size and alignment for a new allocation.
 	 */
-	if (IS_ENABLED(CONFIG_ARM_MPU)) {
+	if (IS_ENABLED(CONFIG_ARM_MPU) | IS_ENABLED(CONFIG_ARC_MPU)) {
 		/* On ARM with an MPU, regions must be sized and aligned to the same
 		 * power of two (larger than 32).
 		 */

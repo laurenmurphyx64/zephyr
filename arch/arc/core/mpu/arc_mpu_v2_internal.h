@@ -73,6 +73,8 @@ static inline void _region_init(uint32_t index, uint32_t region_addr, uint32_t s
 
 	z_arc_v2_aux_reg_write(_ARC_V2_MPU_RDP0 + index, region_attr);
 	z_arc_v2_aux_reg_write(_ARC_V2_MPU_RDB0 + index, region_addr);
+
+	printk("_region_init 0x%x 0x%x, %d\n", z_arc_v2_aux_reg_read(_ARC_V2_MPU_RDP0 + index), z_arc_v2_aux_reg_read(_ARC_V2_MPU_RDB0 + index), index);
 }
 
 /**

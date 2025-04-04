@@ -151,8 +151,8 @@ void arc_core_mpu_configure_mem_domain(struct k_thread *thread)
 
 	for (; region_index >= 0; region_index--) {
 		if (num_partitions) {
-			LOG_DBG("set region 0x%x 0x%lx 0x%x",
-				 region_index, pparts->start, pparts->size);
+			LOG_DBG("set region 0x%x 0x%lx 0x%x 0x%x",
+				 region_index, pparts->start, pparts->size, K_MEM_PARTITION_IS_EXECUTABLE(pparts->attr));
 			_region_init(region_index, pparts->start, pparts->size, pparts->attr);
 			num_partitions--;
 		} else {
