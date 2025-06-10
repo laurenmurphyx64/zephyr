@@ -31,6 +31,7 @@ LOG_MODULE_REGISTER(test_llext);
 #define LLEXT_CONST
 #else
 #define LLEXT_CONST const
+#define LLEXT_SECT __attribute__((section(".llextension")))
 #endif
 
 #ifdef CONFIG_LLEXT_EXPORT_BUILTINS_BY_SLID
@@ -260,7 +261,7 @@ void load_call_unload(const struct llext_test *test_case)
  */
 #define ELF_ALIGN __aligned(4096)
 
-static LLEXT_CONST uint8_t hello_world_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t hello_world_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "hello_world.inc"
 };
 LLEXT_LOAD_UNLOAD(hello_world,
@@ -268,7 +269,7 @@ LLEXT_LOAD_UNLOAD(hello_world,
 )
 
 #ifndef CONFIG_LLEXT_TYPE_ELF_SHAREDLIB
-static LLEXT_CONST uint8_t init_fini_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t init_fini_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "init_fini.inc"
 };
 
@@ -290,39 +291,39 @@ LLEXT_LOAD_UNLOAD(init_fini,
 )
 #endif
 
-static LLEXT_CONST uint8_t logging_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t logging_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "logging.inc"
 };
 LLEXT_LOAD_UNLOAD(logging)
 
-static LLEXT_CONST uint8_t relative_jump_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t relative_jump_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "relative_jump.inc"
 };
 LLEXT_LOAD_UNLOAD(relative_jump)
 
-static LLEXT_CONST uint8_t object_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t object_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "object.inc"
 };
 LLEXT_LOAD_UNLOAD(object)
 
-static LLEXT_CONST uint8_t syscalls_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t syscalls_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "syscalls.inc"
 };
 LLEXT_LOAD_UNLOAD(syscalls)
 
-static LLEXT_CONST uint8_t threads_kernel_objects_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t threads_kernel_objects_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "threads_kernel_objects.inc"
 };
 LLEXT_LOAD_UNLOAD(threads_kernel_objects,
 	.test_setup = threads_objects_test_setup,
 )
 
-static LLEXT_CONST uint8_t align_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t align_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "align.inc"
 };
 LLEXT_LOAD_UNLOAD(align)
 
-static LLEXT_CONST uint8_t inspect_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t inspect_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "inspect.inc"
 };
 
@@ -389,7 +390,7 @@ ZTEST(llext, test_inspect)
 }
 
 #ifndef CONFIG_LLEXT_TYPE_ELF_OBJECT
-static LLEXT_CONST uint8_t multi_file_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t multi_file_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "multi_file.inc"
 };
 LLEXT_LOAD_UNLOAD(multi_file)
@@ -411,11 +412,11 @@ LLEXT_LOAD_UNLOAD(riscv_edge_case_non_paired_hi20_lo12)
 #endif /* !CONFIG_LLEXT_TYPE_ELF_OBJECT */
 
 #ifndef CONFIG_USERSPACE
-static LLEXT_CONST uint8_t export_dependent_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t export_dependent_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "export_dependent.inc"
 };
 
-static LLEXT_CONST uint8_t export_dependency_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t export_dependency_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "export_dependency.inc"
 };
 
