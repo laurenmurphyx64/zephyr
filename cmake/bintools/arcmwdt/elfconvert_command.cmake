@@ -10,7 +10,7 @@ if(STRIP_DEBUG OR STRIP_ALL OR STRIP_UNNEEDED)
   elseif(STRIP_DEBUG)
     set(obj_copy_strip "-ql")
   elseif(STRIP_UNNEEDED)
-    set(obj_copy_strip "-qlh")
+    set(obj_copy_strip "-qlc")
   endif()
 
   # MWDT strip transforms input file in place with no output file option
