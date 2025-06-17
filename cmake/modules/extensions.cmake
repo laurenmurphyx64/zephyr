@@ -5966,16 +5966,16 @@ function(add_llext_target target_name)
   endif()
 
   # When using the arcmwdt toolchain, hundreds of .arcextmap.* sections
-  # may be emitted by the compiler that bloat the shstrtab and are not
-  # removed by the strip command. We must remove them ourselves.
+  # may be emitted by the compiler that are not removed by the strip command.
+  # We must remove them ourselves.
   if (${ZEPHYR_TOOLCHAIN_VARIANT} STREQUAL "arcmwdt")
-    set(mwdt_strip_shstrtab_cmd
+    set(mwdt_strip_arcextmap_cmd
       ${PYTHON_EXECUTABLE}
-      ${ZEPHYR_BASE}/scripts/build/llext_mwdt_strip_shstrtab.py
+      ${ZEPHYR_BASE}/scripts/build/llext_mwdt_strip_arcextmap.py
       ${llext_pkg_output}
     )
   else()
-    set(mwdt_strip_shstrtab_cmd ${CMAKE_COMMAND} -E true)
+    set(mwdt_strip_arcextmap ${CMAKE_COMMAND} -E true)
   endif()
 
   # Remove sections that are unused by the llext loader
@@ -5989,7 +5989,7 @@ function(add_llext_target target_name)
             $<TARGET_PROPERTY:bintools,elfconvert_flag_infile>${llext_pkg_input}
             $<TARGET_PROPERTY:bintools,elfconvert_flag_outfile>${llext_pkg_output}
             $<TARGET_PROPERTY:bintools,elfconvert_flag_final>
-    COMMAND ${mwdt_strip_shstrtab_cmd}
+    COMMAND ${mwdt_strip_arcextmap}
     COMMAND ${slid_inject_cmd}
     DEPENDS ${llext_proc_target} ${llext_pkg_input}
     COMMAND_EXPAND_LISTS
