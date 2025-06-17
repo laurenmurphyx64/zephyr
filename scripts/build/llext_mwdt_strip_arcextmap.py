@@ -78,10 +78,104 @@ def read_cstring(f):
     return b''.join(chars).decode('utf-8')
 
 
-def strip_shstrtab(file):
+def strip_arcextmap(file):
     with open(file, 'r+b') as f:
         elf = ELFFile(f)
 
+        # Read in section header table
+        f.seek(elf.header['e_shoff'])
+        sht = f.read(elf.header['e_shentsize'] * elf.header['e_shnum'])
+
+        # Delete .arcextmap.* sections
+        # i.e., move back sections after .arcextmap.* sections
+        arcextmap_start = 0
+        arcextmap_start_index = 0
+        arcextmap_end = 0
+        arcextmap_end_index = 0
+        index = 0
+        for section in elf.iter_sections():
+            if section.name.startswith('.arcextmap'):
+                if arcextmap_start == 0:
+                    arcextmap_start_index = index
+                    arcextmap_start = section['sh_offset']
+                    logger.debug(f"Found first .arcextmap.* section at 0x{arcextmap_start:x}")
+            if section.name == '.arcextmap':
+                arcextmap_end_index = index
+                arcextmap_end = section['sh_offset'] + section['sh_size']
+                logger.debug(f"Found last .arcextmap section ending at 0x{arcextmap_end:x}")
+            index += 1
+
+        arcextmap_count = arcextmap_end_index - arcextmap_start_index + 1
+        arcextmap_size = arcextmap_end - arcextmap_start
+
+        last_section =  elf.get_section(index - 1)
+        after_arcextmap_end = last_section['sh_offset'] + last_section['sh_size']
+        after_arcextmap_size = after_arcextmap_end - arcextmap_end
+
+        f.seek(arcextmap_end)
+        after_arcextmap = f.read(after_arcextmap_size)
+
+        f.seek(arcextmap_start)
+        f.write(after_arcextmap)
+
+        # Delete .arcextmap.* sections from section header table
+        arcextmap_start_header_pos = arcextmap_start_index * elf.header['e_shentsize']
+        arcextmap_end_header_pos = arcextmap_end_index * elf.header['e_shentsize']
+        del sht[arcextmap_start_header_pos:arcextmap_end_header_pos + elf.header['e_shentsize']]
+
+        # Correct remaining section headers' sh_offset fields
+        for i, section in elf.iter_sections():
+            if i > arcextmap_end_index:
+                sh_offset_pos = (i * elf.header['e_shentsize']) + (16 if elf.elfclass == 32 else 24)
+                sh_offset = section['sh_offset'] - arcextmap_size
+                write_field_to_elf_bytearr(elf, sht, sh_offset_pos, "sh_offset", sh_offset)
+
+        # List surviving sections
+        sections = list(enumerate(elf.iter_sections()))
+        sections = [s for s in sections if not s.name.startswith('.arcextmap')]
+
+        # Rebuild .shstrtab
+        rebuilt_shstrtab = bytearray()
+        rebuilt_section_header_name_offsets = []
+
+        offset = 0
+        for section in elf.iter_sections():
+            if not section.name.startswith('.arcextmap'):
+                rebuilt_shstrtab += section.name.encode('utf-8') + b'\x00'
+                rebuilt_section_header_name_offsets.append(offset)
+                offset += len(section.name) + 1
+
+        logger.debug(f"Rebuilt .shstrtab len: {len(rebuilt_shstrtab)}")
+        logger.debug(f"Rebuilt .shstrtab (first 100 bytes): {rebuilt_shstrtab[:100]}")
+
+        # Correct section header sh_name
+        for i, section in sections:
+            sh_name_offset = i * elf.header['e_shentsize'] # First field
+            shstrtab_offset = rebuilt_section_header_name_offsets[i]
+            write_field_to_elf_bytearr(elf, sht, sh_name_offset, "sh_name", shstrtab_offset)
+            logger.debug(f"{section.name} sh_name at 0x{sh_name_offset:x} = 0x{shstrtab_offset:x}")
+
+        # Correct .shstrtab sh_size
+        shstrtab_hdr_idx = elf.header['e_shstrndx'] - arcextmap_count
+        sh_size_offset = 20 if elf.elfclass == 32 else 32
+        pos = (shstrtab_hdr_idx * elf.header['e_shentsize']) + sh_size_offset
+
+        write_field_to_elf_bytearr(elf, sht, pos,)
+
+        # Overwrite .shstrtab section with the rebuilt .shstrtab
+
+        # Write rebuilt section header table after .shstrtab
+
+        # Truncate the file
+
+        # Correct e_shoff in the ELF header
+
+        # Correct e_shnum in the ELF header
+
+        # Correct e_shstrndx in the ELF header
+        
+
+""""
         # Copy section header table
         shoff = elf.header['e_shoff']
         shentsize = elf.header['e_shentsize']
@@ -138,6 +232,7 @@ def strip_shstrtab(file):
 
         # Truncate the file
         f.truncate()
+"""
 
 
 def main():
@@ -161,10 +256,10 @@ def main():
             logger.error(f"File {args.file} is not a valid ELF file, exiting...")
             sys.exit(1)
 
-    logger.debug(f"File to strip shstrtab: {args.file}")
+    logger.debug(f"File to strip .arcextmap.*: {args.file}")
 
     try:
-        strip_shstrtab(args.file)
+        strip_arcextmap(args.file)
     except Exception as e:
         logger.error(f"An error occurred while processing the file: {e}")
         sys.exit(1)
