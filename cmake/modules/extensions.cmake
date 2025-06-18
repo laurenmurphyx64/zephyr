@@ -5989,7 +5989,7 @@ function(add_llext_target target_name)
             $<TARGET_PROPERTY:bintools,elfconvert_flag_infile>${llext_pkg_input}
             $<TARGET_PROPERTY:bintools,elfconvert_flag_outfile>${llext_pkg_output}
             $<TARGET_PROPERTY:bintools,elfconvert_flag_final>
-    COMMAND ${mwdt_strip_arcextmap}
+    COMMAND ${mwdt_strip_arcextmap_cmd}
     COMMAND ${slid_inject_cmd}
     DEPENDS ${llext_proc_target} ${llext_pkg_input}
     COMMAND_EXPAND_LISTS

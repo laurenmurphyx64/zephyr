@@ -18,6 +18,8 @@ import argparse
 import logging
 import os
 import sys
+import shutil
+
 from elftools.elf.elffile import ELFFile
 
 logger = logging.getLogger("strip")
@@ -34,205 +36,170 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_field_size(elf_struct, field_name):
-    for subcon in elf_struct.subcons:
-        if subcon.name == field_name:
-            return subcon.sizeof()
-    raise ValueError(f"Unknown field name: {field_name}")
+def get_field_size(header, name):
+    for field in header.subcons:
+        if field.name == name:
+            return field.sizeof()
+
+    raise ValueError(f"Unknown field name: {name}")
+
+
+def get_field_offset(header, name):
+    offset = 0
+
+    for field in header.subcons:
+        if field.name == name:
+            break;
+        offset += field.sizeof()
+
+    if offset < header.sizeof():
+        return offset
+
+    raise ValueError(f"Unknown field name: {name}")
 
 
 # We write bytearray to the file afterwards
 # ARC cores are typically little-endian, but some are configurable
-def write_field_to_elf_bytearr(elf, bytearr, pos, field_name, num):
-    try:
-        field_size = get_field_size(elf.structs.Elf_Shdr, field_name)
-    except ValueError:
-        field_size = get_field_size(elf.structs.Elf_Ehdr, field_name)
-
-    if elf.little_endian:
-        bytearr[pos:pos+field_size] = num.to_bytes(field_size, 'little')
+def write_num_to_elf_bytearr_field(elf, bytearr, name, num, sh_ent_idx = 0):
+    if name[0] == 'e':
+        header = elf.structs.Elf_Ehdr
     else:
-        bytearr[pos:pos+field_size] = num.to_bytes(field_size, 'big')
+        header = elf.structs.Elf_Shdr
+
+    size = get_field_size(header, name)
+
+    # sh_ent_idx is 0 for ELF header fields
+    offset = (sh_ent_idx * elf.header['e_shentsize']) + get_field_offset(header, name)
+
+    field = None
+    if elf.little_endian:
+        field = num.to_bytes(size, 'little')
+    else:
+        field = num.to_bytes(size, 'big')
+
+    bytearr[offset:offset+size] = field
 
 
-def read_field_from_elf_file(elf, file, pos, field_name):
-    try:
-        field_size = get_field_size(elf.structs.Elf_Shdr, field_name)
-    except ValueError:
-        field_size = get_field_size(elf.structs.Elf_Ehdr, field_name)
+def strip_arcextmap(f, bak):
+    """Remove .arcextmap.* sections from the ELF file.
 
-    file.seek(pos)
-    data = file.read(field_size)
-    field = int.from_bytes(data, 'little' if elf.little_endian else 'big')
+    This function reads in from a copy of the ELF file and copies over its
+    sections, skipping any sections with names of the form .arcextmap.* It also makes
+    necessary adjustments to the ELF header, section header table, and creates a
+    copy of the section header string table without the unused names, which it
+    writes as the last section of the file before the section header table.
+    """
 
-    return field
+    elf = ELFFile(bak)
 
+    elfh = bytearray()
 
-def read_cstring(f):
-    chars = []
-    while True:
-        b = f.read(1)
-        if not b or b == b'\x00':
-            break
-        chars.append(b)
-    return b''.join(chars).decode('utf-8')
+    e_shentsize = elf.header['e_shentsize']
 
+    e_shoff = 0
+    e_shnum = 0
+    e_shstrndx = 0
 
-def strip_arcextmap(file):
-    with open(file, 'r+b') as f:
-        elf = ELFFile(f)
+    sht = bytearray()
 
-        # Read in section header table
-        f.seek(elf.header['e_shoff'])
-        sht = f.read(elf.header['e_shentsize'] * elf.header['e_shnum'])
+    sht_sh_offsets = []
+    sht_sh_names = []
 
-        # Delete .arcextmap.* sections
-        # i.e., move back sections after .arcextmap.* sections
-        arcextmap_start = 0
-        arcextmap_start_index = 0
-        arcextmap_end = 0
-        arcextmap_end_index = 0
-        index = 0
-        for section in elf.iter_sections():
-            if section.name.startswith('.arcextmap'):
-                if arcextmap_start == 0:
-                    arcextmap_start_index = index
-                    arcextmap_start = section['sh_offset']
-                    logger.debug(f"Found first .arcextmap.* section at 0x{arcextmap_start:x}")
-            if section.name == '.arcextmap':
-                arcextmap_end_index = index
-                arcextmap_end = section['sh_offset'] + section['sh_size']
-                logger.debug(f"Found last .arcextmap section ending at 0x{arcextmap_end:x}")
-            index += 1
+    sections = [] # Sections to be copied over
+    index_mapping = {} # Maps section index in original to copy
 
-        arcextmap_count = arcextmap_end_index - arcextmap_start_index + 1
-        arcextmap_size = arcextmap_end - arcextmap_start
+    shstrtab = bytearray()
 
-        last_section =  elf.get_section(index - 1)
-        after_arcextmap_end = last_section['sh_offset'] + last_section['sh_size']
-        after_arcextmap_size = after_arcextmap_end - arcextmap_end
+    # Read in ELF header
+    bak.seek(0) # elftools moves the file pointer
+    elfh += bak.read(elf.header['e_ehsize'])
 
-        f.seek(arcextmap_end)
-        after_arcextmap = f.read(after_arcextmap_size)
+    # Move the file pointer forward past the ELF header
+    # We will correct it inline later
+    f.write(elfh)
 
-        f.seek(arcextmap_start)
-        f.write(after_arcextmap)
+    # Write out sections except .arcextmap.* and .shstrtab
+    # Copy in section headers except .shstrtab
+    sh_name = 0
+    sh_idx = 0
+    for i, section in enumerate(elf.iter_sections()):
+        if not section.name.startswith('.arcextmap') and section.name != '.shstrtab':
+            sections.append(section)
+            index_mapping[i] = sh_idx
 
-        # Delete .arcextmap.* sections from section header table
-        arcextmap_start_header_pos = arcextmap_start_index * elf.header['e_shentsize']
-        arcextmap_end_header_pos = arcextmap_end_index * elf.header['e_shentsize']
-        del sht[arcextmap_start_header_pos:arcextmap_end_header_pos + elf.header['e_shentsize']]
+            shstrtab += section.name.encode('utf-8') + b'\x00'
+            sht_sh_names.append(sh_name)
+            sh_name += len(section.name) + 1
 
-        # Correct remaining section headers' sh_offset fields
-        for i, section in elf.iter_sections():
-            if i > arcextmap_end_index:
-                sh_offset_pos = (i * elf.header['e_shentsize']) + (16 if elf.elfclass == 32 else 24)
-                sh_offset = section['sh_offset'] - arcextmap_size
-                write_field_to_elf_bytearr(elf, sht, sh_offset_pos, "sh_offset", sh_offset)
+            bak.seek(section['sh_offset'])
+            section_data = bak.read(section['sh_size'])
 
-        # List surviving sections
-        sections = list(enumerate(elf.iter_sections()))
-        sections = [s for s in sections if not s.name.startswith('.arcextmap')]
+            # Accomodate for alignment
+            sh_addralign = section['sh_addralign']
+            # How many bytes we overshot alignment by
+            past_by = f.tell() % sh_addralign if sh_addralign != 0 else 0
+            if past_by > 0:
+                f.seek(f.tell() + (sh_addralign - past_by))
 
-        # Rebuild .shstrtab
-        rebuilt_shstrtab = bytearray()
-        rebuilt_section_header_name_offsets = []
+            sht_sh_offsets.append(f.tell())
+            f.write(section_data)
 
-        offset = 0
-        for section in elf.iter_sections():
-            if not section.name.startswith('.arcextmap'):
-                rebuilt_shstrtab += section.name.encode('utf-8') + b'\x00'
-                rebuilt_section_header_name_offsets.append(offset)
-                offset += len(section.name) + 1
+            bak.seek(elf.header['e_shoff'] + (i * e_shentsize))
+            section_header = bak.read(e_shentsize)
+            sht += section_header
 
-        logger.debug(f"Rebuilt .shstrtab len: {len(rebuilt_shstrtab)}")
-        logger.debug(f"Rebuilt .shstrtab (first 100 bytes): {rebuilt_shstrtab[:100]}")
+            sh_idx += 1
 
-        # Correct section header sh_name
-        for i, section in sections:
-            sh_name_offset = i * elf.header['e_shentsize'] # First field
-            shstrtab_offset = rebuilt_section_header_name_offsets[i]
-            write_field_to_elf_bytearr(elf, sht, sh_name_offset, "sh_name", shstrtab_offset)
-            logger.debug(f"{section.name} sh_name at 0x{sh_name_offset:x} = 0x{shstrtab_offset:x}")
+    # Write .shstrtab as the last section
+    # Copy in .shstrtab section header
+    e_shstrndx = sh_idx
+    e_shnum = sh_idx + 1
 
-        # Correct .shstrtab sh_size
-        shstrtab_hdr_idx = elf.header['e_shstrndx'] - arcextmap_count
-        sh_size_offset = 20 if elf.elfclass == 32 else 32
-        pos = (shstrtab_hdr_idx * elf.header['e_shentsize']) + sh_size_offset
+    sections.append(elf.get_section_by_name('.shstrtab'))
+    index_mapping[elf.header['e_shstrndx']] = e_shstrndx
 
-        write_field_to_elf_bytearr(elf, sht, pos,)
+    shstrtab += '.shstrtab'.encode('utf-8') + b'\x00'
+    sht_sh_names.append(sh_name)
 
-        # Overwrite .shstrtab section with the rebuilt .shstrtab
+    sht_sh_offsets.append(f.tell())
+    f.write(shstrtab)
 
-        # Write rebuilt section header table after .shstrtab
+    bak.seek(elf.header['e_shoff'] + (elf.header['e_shstrndx'] * e_shentsize))
+    shstrtab_header = bak.read(e_shentsize)
+    sht += shstrtab_header
 
-        # Truncate the file
+    # Modify the section header table
+    # Adjust size of .shstrtab
+    write_num_to_elf_bytearr_field(elf, sht, "sh_size", len(shstrtab), e_shstrndx)
 
-        # Correct e_shoff in the ELF header
+    # Adjust sh_name, sh_offset, sh_link and sh_info for each section header
+    for i, section in enumerate(sections):
+        write_num_to_elf_bytearr_field(elf, sht, "sh_name", sht_sh_names[i], i)
+        write_num_to_elf_bytearr_field(elf, sht, "sh_offset", sht_sh_offsets[i], i)
 
-        # Correct e_shnum in the ELF header
+        if section['sh_type'] == 'SHT_REL' or section['sh_type'] == 'SHT_RELA' \
+            or section['sh_type'] == 'SHT_SYMTAB':
+            sh_link = index_mapping[section['sh_link']]
+            write_num_to_elf_bytearr_field(elf, sht, "sh_link", sh_link, i)
 
-        # Correct e_shstrndx in the ELF header
-        
+            if section['sh_type'] != 'SHT_SYMTAB':
+                sh_info = index_mapping[section['sh_info']]
+                write_num_to_elf_bytearr_field(elf, sht, "sh_info", sh_info, i)
 
-""""
-        # Copy section header table
-        shoff = elf.header['e_shoff']
-        shentsize = elf.header['e_shentsize']
+    # Write the section header table to the file
+    e_shoff = f.tell()
+    f.write(sht)
 
-        f.seek(shoff)
-        sht = bytearray(f.read(shentsize * elf.header['e_shnum']))
+    f.truncate()
 
-        # Rebuild the section header string table
-        shstrtab = elf.get_section_by_name('.shstrtab')
+    # Modify the ELF table
+    write_num_to_elf_bytearr_field(elf, elfh, "e_shoff", e_shoff)
+    write_num_to_elf_bytearr_field(elf, elfh, "e_shnum", e_shnum)
+    write_num_to_elf_bytearr_field(elf, elfh, "e_shstrndx", e_shstrndx)
 
-        rebuilt_shstrtab = bytearray()
-        rebuilt_section_header_name_offsets = []
-
-        offset = 0
-        for section in elf.iter_sections():
-            rebuilt_shstrtab += section.name.encode('utf-8') + b'\x00'
-            rebuilt_section_header_name_offsets.append(offset)
-            offset += len(section.name) + 1
-
-        logger.debug(f"Rebuilt .shstrtab len: {len(rebuilt_shstrtab)}")
-        logger.debug(f"Rebuilt .shstrtab (first 100 bytes): {rebuilt_shstrtab[:100]}")
-
-        # Correct section header sh_name offsets
-        for i, section in enumerate(elf.iter_sections()):
-            sh_name_offset = i * elf.header['e_shentsize']
-            shstr_offset = rebuilt_section_header_name_offsets[i]
-            write_field_to_elf_bytearr(elf, sht, sh_name_offset, "sh_name", shstr_offset)
-            logger.debug(f"{section.name} sh_name at 0x{sh_name_offset:x} = 0x{shstr_offset:x}")
-
-        # Correct the .shstrtab's sh_size in the section header table
-        sh_size_offset = 20 if elf.elfclass == 32 else 32
-        shstrtab_sh_size_offset = (elf.header['e_shstrndx'] * shentsize) + sh_size_offset
-        write_field_to_elf_bytearr(elf, sht, shstrtab_sh_size_offset, "sh_size", len(rebuilt_shstrtab))
-        logger.debug(f".shstrtab sh_size at 0x{shstrtab_sh_size_offset:x} = 0x{len(rebuilt_shstrtab):x}")
-
-        # Overwrite .shstrtab with the rebuilt string table
-        f.seek(shstrtab['sh_offset'])
-        f.write(rebuilt_shstrtab)
-
-        # Update e_shoff in the ELF header as appearing after .shstrtab
-        e_shoff = f.tell()
-        e_shoff_bytearr = bytearray()
-        write_field_to_elf_bytearr(elf, e_shoff_bytearr, 0, "e_shoff", e_shoff)
-
-        e_shoff_offset = 32 if elf.elfclass == 32 else 40
-        f.seek(e_shoff_offset)
-        f.write(e_shoff_bytearr)
-
-        logger.debug(f"e_shoff at 0x{e_shoff_offset:x} = 0x{e_shoff:x}")
-
-        # Write modified section header table after .shstrtab
-        f.seek(e_shoff)
-        f.write(sht)
-
-        # Truncate the file
-        f.truncate()
-"""
+    # Write back the ELF table
+    f.seek(0)
+    f.write(elfh)
 
 
 def main():
@@ -259,7 +226,14 @@ def main():
     logger.debug(f"File to strip .arcextmap.*: {args.file}")
 
     try:
-        strip_arcextmap(args.file)
+        # Copy extension.llext to extension.llext.bak
+        shutil.copy(args.file, f"{args.file}.bak")
+
+        # Read from extension.llext.bak
+        with open(f"{args.file}.bak", 'rb') as bak:
+            # Write sections to keep one by one to extension.llext
+            with open(args.file, 'wb') as f:
+                strip_arcextmap(f, bak)
     except Exception as e:
         logger.error(f"An error occurred while processing the file: {e}")
         sys.exit(1)
