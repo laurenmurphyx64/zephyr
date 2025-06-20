@@ -376,10 +376,22 @@ ZTEST(llext, test_inspect)
 	res = llext_load(ldr, "inspect", &ext, &ldr_parm);
 	zassert_ok(res, "load should succeed");
 
+	/* MWDT puts variables that are supposed to go into .bss into .data,
+	 * and, when Harvard / CCM is enabled, puts rodata in data-type sections.
+	 */
+#ifdef __CCAC__
+	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".data", "number_in_bss");
+#else
 	do_inspect_checks(ldr, ext, LLEXT_MEM_BSS, ".bss", "number_in_bss");
+#endif
 	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".data", "number_in_data");
+#if defined(CONFIG_HARVARD) && defined(__CCAC__)
+	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".rodata_in_data", "number_in_rodata");
+	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".my_rodata", "number_in_my_rodata");
+#else
 	do_inspect_checks(ldr, ext, LLEXT_MEM_RODATA, ".rodata", "number_in_rodata");
 	do_inspect_checks(ldr, ext, LLEXT_MEM_RODATA, ".my_rodata", "number_in_my_rodata");
+#endif
 	do_inspect_checks(ldr, ext, LLEXT_MEM_TEXT, ".text", "function_in_text");
 
 	max_alloc_bytes = ext->alloc_size;

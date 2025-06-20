@@ -12,6 +12,10 @@ names from the section header string table, shrinking the file size. This is
 necessary for boards where MWDT CCAC emits debugging sections like .arcextmap.*,
 as even the smallest extension (<1k) will have a >16KB section header string table.
 
+TODO: Remove the part where I delete the arcextmap.* sections, as this is not
+necessary when you give strip -qlu. This script is only needed to remove unused names
+from the section header string table.
+
 """
 
 import argparse
