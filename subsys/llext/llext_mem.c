@@ -31,7 +31,15 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 struct k_heap llext_heap;
 bool llext_heap_inited;
 #else
+#ifdef CONFIG_HARVARD
+// Add a text and heap size config
+Z_HEAP_DEFINE_IN_SECT(llext_heap_iccm, (CONFIG_LLEXT_HEAP_SIZE * 1024), \
+	__attribute__((section(".text.llext_heap_iccm"))));
+Z_HEAP_DEFINE_IN_SECT(llext_heap_dccm, (CONFIG_LLEXT_HEAP_SIZE * 1024), \
+	__attribute__((section(".data.llext_heap_dccm"))));
+#else
 K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * 1024);
+#endif
 #endif
 
 /*
@@ -149,7 +157,7 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	}
 
 	/* Allocate a suitably aligned area for the region. */
-	ext->mem[mem_idx] = llext_aligned_alloc(region_align, region_alloc);
+	ext->mem[mem_idx] = llext_aligned_alloc(region_align, region_alloc, region);
 	if (!ext->mem[mem_idx]) {
 		LOG_ERR("Failed allocating %zd bytes %zd-aligned for region %d",
 			(size_t)region_alloc, (size_t)region_align, mem_idx);

@@ -75,9 +75,20 @@ int arch_elf_relocate(struct llext_loader *ldr, struct llext *ext, elf_rela_t *r
 		 * A = addend
 		 * P = relative offset to PCL
 		 */
+		value = (sym_base_addr + rel->r_addend - (loc & ~0x3)) >> 1;
+
+		insn = ME(insn);
 		
 		/* disp25h */
-		
+		insn = insn & ~0x7feffcf;
+		insn |= ((value >> 0) & 0x03ff) << 17;
+		insn |= ((value >> 10) & 0x03ff) << 6;
+		insn |= ((value >> 20) & 0x000f) << 0;
+
+		insn = ME(insn);
+
+		UNALIGNED_PUT(insn, (uint32_t *)loc);
+		break;
 	case R_ARC_S25W_PCREL:
 		/* ((S + A) - P) >> 2 */
 		value = (sym_base_addr + rel->r_addend - (loc & ~0x3)) >> 2;

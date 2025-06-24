@@ -4,18 +4,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Remove unused names from the section header string table. 
+"""Strip arcextmap-related info and sections.
 
-The MWDT strip utility does not remove the names of stripped sections from the
+The MWDT strip utility does not strip the names of stripped sections from the
 section header string table. This script is a workaround to remove unused
 names from the section header string table, shrinking the file size. This is
 necessary for boards where MWDT CCAC emits debugging sections like .arcextmap.*,
 as even the smallest extension (<1k) will have a >16KB section header string table.
 
-TODO: Remove the part where I delete the arcextmap.* sections, as this is not
-necessary when you give strip -qlu. This script is only needed to remove unused names
-from the section header string table.
-
+This script is also able to remove the sections themselves, not just their names,
+should they appear in the ELF. This will happen if strip is not given the
+"strip unallocated" option for whatever reason.
 """
 
 import argparse
