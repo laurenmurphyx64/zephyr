@@ -192,7 +192,6 @@ SECTIONS {
 		*(".data")
 		*(".data.*")
 		*(".kernel.*")
-		*(".llextension.*")
 
 /* Located in generated directory. This file is populated by the
  * zephyr_linker_sources() Cmake function.

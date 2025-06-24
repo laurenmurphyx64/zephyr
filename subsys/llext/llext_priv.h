@@ -43,32 +43,67 @@ static inline bool llext_heap_is_inited(void)
 
 static inline void *llext_alloc(size_t bytes)
 {
+#ifdef CONFIG_HARVARD
+	extern struct k_heap llext_heap_dccm;
+#else
 	extern struct k_heap llext_heap;
+#endif
 
 	if (!llext_heap_is_inited()) {
 		return NULL;
 	}
+
+#ifdef CONFIG_HARVARD
+	/* Unaligned allocs are used for LLEXT metadata */
+	return k_heap_alloc(&llext_heap_dccm, bytes, K_NO_WAIT);
+#else
 	return k_heap_alloc(&llext_heap, bytes, K_NO_WAIT);
+#endif
 }
 
-static inline void *llext_aligned_alloc(size_t align, size_t bytes)
+static inline void *llext_aligned_alloc(size_t align, size_t bytes, elf_shdr_t *hdr)
 {
+#ifdef CONFIG_HARVARD
+	extern struct k_heap llext_heap_iccm;
+	extern struct k_heap llext_heap_dccm;
+#else
 	extern struct k_heap llext_heap;
+#endif
 
 	if (!llext_heap_is_inited()) {
 		return NULL;
 	}
+
+#ifdef CONFIG_HARVARD
+	if (hdr == NULL || !(hdr->sh_flags & SHF_EXECINSTR)) {
+		return k_heap_aligned_alloc(&llext_heap_dccm, align, bytes, K_NO_WAIT);
+	} else {
+		return k_heap_aligned_alloc(&llext_heap_iccm, align, bytes, K_NO_WAIT);
+	}
+#else
 	return k_heap_aligned_alloc(&llext_heap, align, bytes, K_NO_WAIT);
+#endif
 }
 
 static inline void llext_free(void *ptr)
 {
+#ifdef CONFIG_HARVARD
+	extern struct k_heap llext_heap_iccm;
+	extern struct k_heap llext_heap_dccm;
+#else
 	extern struct k_heap llext_heap;
+#endif
 
 	if (!llext_heap_is_inited()) {
 		return;
 	}
+
+#ifdef CONFIG_HARVARD
+	k_heap_free(&llext_heap_iccm, ptr);
+	k_heap_free(&llext_heap_dccm, ptr);
+#else
 	k_heap_free(&llext_heap, ptr);
+#endif
 }
 
 /*
