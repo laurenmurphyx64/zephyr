@@ -112,12 +112,12 @@ static inline void *llext_aligned_alloc_iccm(size_t align, size_t bytes)
 	return k_heap_aligned_alloc(&llext_heap_iccm, align, bytes, K_NO_WAIT);
 }
 
-static inline void *llext_free_iccm(void *ptr)
+static inline void llext_free_iccm(void *ptr)
 {
 	extern struct k_heap llext_heap_iccm;
 
 	if (!llext_heap_is_inited()) {
-		return NULL;
+		return;
 	}
 
 	k_heap_free(&llext_heap_iccm, ptr);
