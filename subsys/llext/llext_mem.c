@@ -34,7 +34,7 @@ bool llext_heap_inited;
 #ifdef CONFIG_HARVARD
 // Add a text and heap size config
 Z_HEAP_DEFINE_IN_SECT(llext_heap_iccm, (CONFIG_LLEXT_HEAP_SIZE * 1024), \
-	__attribute__((section(".text.llext_heap_iccm"))));
+	__attribute__((section(".rodata.llext_heap_iccm"))));
 Z_HEAP_DEFINE_IN_SECT(llext_heap_dccm, (CONFIG_LLEXT_HEAP_SIZE * 1024), \
 	__attribute__((section(".data.llext_heap_dccm"))));
 #else
@@ -157,15 +157,15 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	}
 
 	/* Allocate a suitably aligned area for the region. */
-	#ifdef CONFIG_HARVARD
+#ifdef CONFIG_HARVARD
 	if (region->sh_flags & SHF_EXECINSTR) {
-		llext_aligned_alloc_iccm(region_align, region_alloc);
+		ext->mem[mem_idx] = llext_aligned_alloc_iccm(region_align, region_alloc);
 	} else {
-		llext_aligned_alloc(region_align, region_alloc);
+		ext->mem[mem_idx] = llext_aligned_alloc(region_align, region_alloc);
 	}
-	#else
+#else
 	ext->mem[mem_idx] = llext_aligned_alloc(region_align, region_alloc);
-	#endif
+#endif
 
 	if (!ext->mem[mem_idx]) {
 		LOG_ERR("Failed allocating %zd bytes %zd-aligned for region %d",
