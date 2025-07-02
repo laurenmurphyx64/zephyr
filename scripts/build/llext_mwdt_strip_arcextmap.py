@@ -4,7 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Strip arcextmap-related info and sections.
+'''Strip arcextmap-related info and sections.
 
 The MWDT strip utility does not strip the names of stripped sections from the
 section header string table. This script is a workaround to remove unused
@@ -14,8 +14,8 @@ as even the smallest extension (<1k) will have a >16KB section header string tab
 
 This script is also able to remove the sections themselves, not just their names,
 should they appear in the ELF. This will happen if strip is not given the
-"strip unallocated" option for whatever reason.
-"""
+'strip unallocated' option for whatever reason.
+'''
 
 import argparse
 import logging
@@ -24,74 +24,31 @@ import sys
 import shutil
 
 from elftools.elf.elffile import ELFFile
+from llext_elf_parser import write_field_to_header_bytearr
 
-logger = logging.getLogger("strip")
-LOGGING_FORMAT = "[%(levelname)s][%(name)s] %(message)s"
+logger = logging.getLogger('strip')
+LOGGING_FORMAT = '[%(levelname)s][%(name)s] %(message)s'
 
 
 def parse_args():
     parser = argparse.ArgumentParser(allow_abbrev=False)
 
-    parser.add_argument("file", help="Object file")
-    parser.add_argument("--debug", action="store_true",
-                        help="Print extra debugging information")
+    parser.add_argument('file', help='Object file')
+    parser.add_argument('--debug', action='store_true',
+                        help='Print extra debugging information')
 
     return parser.parse_args()
 
 
-def get_field_size(header, name):
-    for field in header.subcons:
-        if field.name == name:
-            return field.sizeof()
-
-    raise ValueError(f"Unknown field name: {name}")
-
-
-def get_field_offset(header, name):
-    offset = 0
-
-    for field in header.subcons:
-        if field.name == name:
-            break;
-        offset += field.sizeof()
-
-    if offset < header.sizeof():
-        return offset
-
-    raise ValueError(f"Unknown field name: {name}")
-
-
-# We write bytearray to the file afterwards
-# ARC cores are typically little-endian, but some are configurable
-def write_num_to_elf_bytearr_field(elf, bytearr, name, num, sh_ent_idx = 0):
-    if name[0] == 'e':
-        header = elf.structs.Elf_Ehdr
-    else:
-        header = elf.structs.Elf_Shdr
-
-    size = get_field_size(header, name)
-
-    # sh_ent_idx is 0 for ELF header fields
-    offset = (sh_ent_idx * elf.header['e_shentsize']) + get_field_offset(header, name)
-
-    field = None
-    if elf.little_endian:
-        field = num.to_bytes(size, 'little')
-    else:
-        field = num.to_bytes(size, 'big')
-
-    bytearr[offset:offset+size] = field
-
-
 def strip_arcextmap(f, bak):
-    """Remove .arcextmap.* sections from the ELF file.
+    '''Remove .arcextmap.* sections from the ELF file.
 
     This function reads in from a copy of the ELF file and copies over its
     sections, skipping any sections with names of the form .arcextmap.* It also makes
     necessary adjustments to the ELF header, section header table, and creates a
     copy of the section header string table without the unused names, which it
     writes as the last section of the file before the section header table.
-    """
+    '''
 
     elf = ELFFile(bak)
 
@@ -173,21 +130,21 @@ def strip_arcextmap(f, bak):
 
     # Modify the section header table
     # Adjust size of .shstrtab
-    write_num_to_elf_bytearr_field(elf, sht, "sh_size", len(shstrtab), e_shstrndx)
+    write_field_to_header_bytearr(elf, sht, 'sh_size', len(shstrtab), e_shstrndx)
 
     # Adjust sh_name, sh_offset, sh_link and sh_info for each section header
     for i, section in enumerate(sections):
-        write_num_to_elf_bytearr_field(elf, sht, "sh_name", sht_sh_names[i], i)
-        write_num_to_elf_bytearr_field(elf, sht, "sh_offset", sht_sh_offsets[i], i)
+        write_field_to_header_bytearr(elf, sht, 'sh_name', sht_sh_names[i], i)
+        write_field_to_header_bytearr(elf, sht, 'sh_offset', sht_sh_offsets[i], i)
 
         if section['sh_type'] == 'SHT_REL' or section['sh_type'] == 'SHT_RELA' \
             or section['sh_type'] == 'SHT_SYMTAB':
             sh_link = index_mapping[section['sh_link']]
-            write_num_to_elf_bytearr_field(elf, sht, "sh_link", sh_link, i)
+            write_field_to_header_bytearr(elf, sht, 'sh_link', sh_link, i)
 
             if section['sh_type'] != 'SHT_SYMTAB':
                 sh_info = index_mapping[section['sh_info']]
-                write_num_to_elf_bytearr_field(elf, sht, "sh_info", sh_info, i)
+                write_field_to_header_bytearr(elf, sht, 'sh_info', sh_info, i)
 
     # Write the section header table to the file
     e_shoff = f.tell()
@@ -196,9 +153,9 @@ def strip_arcextmap(f, bak):
     f.truncate()
 
     # Modify the ELF table
-    write_num_to_elf_bytearr_field(elf, elfh, "e_shoff", e_shoff)
-    write_num_to_elf_bytearr_field(elf, elfh, "e_shnum", e_shnum)
-    write_num_to_elf_bytearr_field(elf, elfh, "e_shstrndx", e_shstrndx)
+    write_field_to_header_bytearr(elf, elfh, 'e_shoff', e_shoff)
+    write_field_to_header_bytearr(elf, elfh, 'e_shnum', e_shnum)
+    write_field_to_header_bytearr(elf, elfh, 'e_shstrndx', e_shstrndx)
 
     # Write back the ELF table
     f.seek(0)
@@ -216,29 +173,31 @@ def main():
         logger.setLevel(logging.WARNING)
 
     if not os.path.isfile(args.file):
-        logger.error(f"Cannot find file {args.file}, exiting...")
+        logger.error(f'Cannot find file {args.file}, exiting...')
         sys.exit(1)
 
     with open(args.file, 'rb') as f:
         try:
             ELFFile(f)
         except Exception:
-            logger.error(f"File {args.file} is not a valid ELF file, exiting...")
+            logger.error(f'File {args.file} is not a valid ELF file, exiting...')
             sys.exit(1)
 
-    logger.debug(f"File to strip .arcextmap.*: {args.file}")
+    logger.debug(f'File to strip .arcextmap.*: {args.file}')
 
     try:
         # Copy extension.llext to extension.llext.bak
-        shutil.copy(args.file, f"{args.file}.bak")
+        shutil.copy(args.file, f'{args.file}.bak')
 
         # Read from extension.llext.bak
-        with open(f"{args.file}.bak", 'rb') as bak:
+        with open(f'{args.file}.bak', 'rb') as bak:
             # Write sections to keep one by one to extension.llext
             with open(args.file, 'wb') as f:
                 strip_arcextmap(f, bak)
+
+        os.remove(f'{args.file}.bak')
     except Exception as e:
-        logger.error(f"An error occurred while processing the file: {e}")
+        logger.error(f'An error occurred while processing the file: {e}')
         sys.exit(1)
 
 
