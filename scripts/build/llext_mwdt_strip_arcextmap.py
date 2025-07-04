@@ -152,12 +152,12 @@ def strip_arcextmap(f, bak):
 
     f.truncate()
 
-    # Modify the ELF table
+    # Modify the ELF header
     write_field_to_header_bytearr(elf, elfh, 'e_shoff', e_shoff)
     write_field_to_header_bytearr(elf, elfh, 'e_shnum', e_shnum)
     write_field_to_header_bytearr(elf, elfh, 'e_shstrndx', e_shstrndx)
 
-    # Write back the ELF table
+    # Write back the ELF header
     f.seek(0)
     f.write(elfh)
 
