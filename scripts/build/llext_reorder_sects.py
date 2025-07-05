@@ -20,7 +20,8 @@ from enum import Enum
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.constants import SH_FLAGS
-from llext_elf_parser import write_field_to_header_bytearr
+from elftools.elf.constants import SHN_INDICES
+from llext_elf_parser import write_field_in_struct_bytearr
 
 logger = logging.getLogger('reorder')
 LOGGING_FORMAT = '[%(levelname)s][%(name)s] %(message)s'
@@ -124,6 +125,44 @@ def get_region_for_section(elf, section):
 
     return mem_idx
 
+def needs_reordering(elf, region_for_sects):
+    needs_reorder = False
+    # (See llext_map_sections)
+    for i in range(LlextMem.LLEXT_MEM_COUNT.value + 1):
+        for j in range(i + 1, LlextMem.LLEXT_MEM_COUNT.value + 1):
+            if region_for_sects[i].sh_type == 'SHT_NULL' or \
+               region_for_sects[i].sh_size == 0 or \
+               region_for_sects[j].sh_type == 'SHT_NULL' or \
+               region_for_sects[j].sh_size == 0:
+                continue
+
+            if (i == LlextMem.LLEXT_MEM_DATA.value or \
+                i == LlextMem.LLEXT_MEM_RODATA.value) and \
+                j == LlextMem.LLEXT_MEM_EXPORT.value:
+                continue
+
+            if i == LlextMem.LLEXT_MEM_EXPORT.value or \
+               j == LlextMem.LLEXT_MEM_EXPORT.value:
+                continue
+
+            if (elf.header['e_type'] == 'ET_DYN') and \
+                (region_for_sects[i].sh_flags & SH_FLAGS.SHF_ALLOC) and \
+                (region_for_sects[j].sh_flags & SH_FLAGS.SHF_ALLOC):
+                if region_for_sects[i].overlaps('sh_addr', region_for_sects[j]):
+                    logger.debug(f'Region {i} VMA range overlaps with {j}')
+                    needs_reorder = True
+                    break
+
+            if i == LlextMem.LLEXT_MEM_BSS.value or \
+               j == LlextMem.LLEXT_MEM_BSS.value:
+                continue
+
+            if region_for_sects[i].overlaps('sh_offset', region_for_sects[j]):
+                logger.debug(f'Region {i} ELF file range overlaps with {j}')
+                needs_reorder = True
+                break
+
+    return needs_reorder
 
 def reorder_sections(f, bak):
     elf = ELFFile(bak)
@@ -158,46 +197,17 @@ def reorder_sections(f, bak):
         region_idx = get_region_for_section(elf, section)
         region_for_sects[region_idx].add_section(section)
 
-    # Determine if sections need to be reordered
-    # (See llext_map_sections)
-    to_reorder = False
-    for i in range(LlextMem.LLEXT_MEM_COUNT.value):
-        for j in range(i + 1, LlextMem.LLEXT_MEM_COUNT.value + 1):
-            if region_for_sects[i].sh_type == 'SHT_NULL' or \
-               region_for_sects[i].sh_size == 0 or \
-               region_for_sects[j].sh_type == 'SHT_NULL' or \
-               region_for_sects[j].sh_size == 0:
-                continue
+    needs_reorder = needs_reordering(elf, region_for_sects)
 
-            if (i == LlextMem.LLEXT_MEM_DATA.value or \
-                i == LlextMem.LLEXT_MEM_RODATA.value) and \
-                j == LlextMem.LLEXT_MEM_EXPORT.value:
-                continue
+    if not needs_reorder:
+        return needs_reorder
 
-            if i == LlextMem.LLEXT_MEM_EXPORT.value or \
-               j == LlextMem.LLEXT_MEM_EXPORT.value:
-                continue
+    for section in elf.iter_sections():
+        if section.name.startswith('.got') or section.name.startswith('.plt'):
+            logger.warning('Reordering not yet supported for .got / .plt sections')
+            return needs_reorder
 
-            if (elf.header['e_type'] == 'ET_DYN') and \
-                (region_for_sects[i].sh_flags & SH_FLAGS.SHF_ALLOC) and \
-                (region_for_sects[j].sh_flags & SH_FLAGS.SHF_ALLOC):
-                if region_for_sects[i].overlaps('sh_addr', region_for_sects[j]):
-                    logger.debug(f'Region {i} VMA range overlaps with {j}')
-                    to_reorder = True
-                    break
-
-            if i == LlextMem.LLEXT_MEM_BSS.value or \
-               j == LlextMem.LLEXT_MEM_BSS.value:
-                continue
-
-            if region_for_sects[i].overlaps('sh_offset', region_for_sects[j]):
-                logger.debug(f'Region {i} ELF file range overlaps with {j}')
-                to_reorder = True
-                break
-
-    if not to_reorder:
-        logger.info('No sections to reorder, exiting...')
-        return to_reorder
+    logger.debug('Reordering sections...')
 
     # Create ordered list of sections
     ordered_sections = [elf.get_section(0)]
@@ -224,24 +234,38 @@ def reorder_sections(f, bak):
             logger.debug(f'Adjusting section offset for sh_addralign {sh_addralign}')
         logger.debug(f'Section {i} at 0x{f.tell():x} with name {section.name}')
 
-        # Write section header
+        # Add and update section header to the section header table
         bak_sht_idx = elf.get_section_index(section.name)
         sht += bak_sht[bak_sht_idx * e_shentsize:(bak_sht_idx + 1) * e_shentsize]
-        write_field_to_header_bytearr(elf, sht, 'sh_offset', f.tell(), i)
+        write_field_in_struct_bytearr(elf, sht, 'sh_offset', f.tell(), i)
 
         if section['sh_type'] == 'SHT_REL' or section['sh_type'] == 'SHT_RELA' \
             or section['sh_type'] == 'SHT_SYMTAB':
             sh_link = index_mapping[section['sh_link']]
-            write_field_to_header_bytearr(elf, sht, 'sh_link', sh_link, i)
+            write_field_in_struct_bytearr(elf, sht, 'sh_link', sh_link, i)
             logger.debug(f'\tsh_link updated from {section['sh_link']} to {sh_link}')
 
             if section['sh_type'] != 'SHT_SYMTAB':
                 sh_info = index_mapping[section['sh_info']]
-                write_field_to_header_bytearr(elf, sht, 'sh_info', sh_info, i)
+                write_field_in_struct_bytearr(elf, sht, 'sh_info', sh_info, i)
+                logger.debug(f'\tsh_info updated from {section['sh_info']} to {sh_info}')
 
-        # Write section data
+        # Read in section data
         bak.seek(section['sh_offset'])
-        data = bak.read(section['sh_size'])
+        data = bytearray() + bak.read(section['sh_size'])
+
+        # Correct symbol table
+        if section['sh_type'] == 'SHT_SYMTAB':
+            symtab = elf._make_symbol_table_section(section.header, section.name)
+            for j in range(section['sh_size'] // section['sh_entsize']):
+                st_shndx = symtab.get_symbol(j).entry['st_shndx']
+                if st_shndx != 'SHN_UNDEF' and st_shndx != 'SHN_COMMON' and st_shndx != 'SHN_ABS':
+                    logger.debug('sym {} st_shndx updated from {} to {}'.format( \
+                            j, st_shndx, index_mapping[st_shndx]))
+                    st_shndx = index_mapping[st_shndx]
+                    write_field_in_struct_bytearr(elf, data, 'st_shndx', st_shndx, j)
+
+        # Write out section data
         f.write(data)
 
     # Write out section header table
@@ -251,13 +275,13 @@ def reorder_sections(f, bak):
     f.write(sht)
 
     # Update and rewrite out ELF header
-    write_field_to_header_bytearr(elf, elfh, 'e_shoff', e_shoff)
-    write_field_to_header_bytearr(elf, elfh, 'e_shstrndx', e_shstrndx)
+    write_field_in_struct_bytearr(elf, elfh, 'e_shoff', e_shoff)
+    write_field_in_struct_bytearr(elf, elfh, 'e_shstrndx', e_shstrndx)
 
     f.seek(0)
     f.write(elfh)
 
-    return to_reorder
+    return needs_reorder
 
 def main():
     args = parse_args()
@@ -294,9 +318,11 @@ def main():
                 reordered = reorder_sections(f, bak)
 
         if not reordered:
+            logger.info('Exiting without reordering...')
             os.remove(f'{args.file}')
             os.rename(f'{args.file}.bak', args.file)
         else:
+            logger.info('Sections reordered.')
             os.remove(f'{args.file}.bak')
     except Exception as e:
         logger.error(f'An error occurred while processing the file: {e}')

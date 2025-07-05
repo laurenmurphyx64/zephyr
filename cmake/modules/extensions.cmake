@@ -5948,9 +5948,9 @@ function(add_llext_target target_name)
     set(slid_inject_cmd ${CMAKE_COMMAND} -E true)
   endif()
 
-  # When using the arcmwdt toolchain, hundreds of .arcextmap.* sections
-  # may be emitted by the compiler that are not removed by the strip command.
-  # We must remove them ourselves.
+  # When using the arcmwdt toolchain, ccac may emit hundreds of .arcextmap.*
+  # sections that are not removed by the strip command, bloating the
+  # string table of the llext extension and increasing its size
   if (${ZEPHYR_TOOLCHAIN_VARIANT} STREQUAL "arcmwdt")
     set(mwdt_strip_arcextmap_cmd
       ${PYTHON_EXECUTABLE}
@@ -5960,6 +5960,14 @@ function(add_llext_target target_name)
   else()
     set(mwdt_strip_arcextmap ${CMAKE_COMMAND} -E true)
   endif()
+
+  # The LLEXT loader cannot load ELF files where regions overlap, so
+  # reorder the sections in these cases
+  set(reorder_sects_cmd
+    ${PYTHON_EXECUTABLE}
+    ${ZEPHYR_BASE}/scripts/build/llext_reorder_sects.py
+    ${llext_pkg_output}
+  )
 
   # Remove sections that are unused by the llext loader
   add_custom_command(
@@ -5972,6 +5980,7 @@ function(add_llext_target target_name)
             $<TARGET_PROPERTY:bintools,elfconvert_flag_outfile>${llext_pkg_output}
             $<TARGET_PROPERTY:bintools,elfconvert_flag_final>
     COMMAND ${mwdt_strip_arcextmap_cmd}
+    COMMAND ${reorder_sects_cmd}
     COMMAND ${slid_inject_cmd}
     DEPENDS ${llext_proc_target} ${llext_pkg_input}
     COMMAND_EXPAND_LISTS
