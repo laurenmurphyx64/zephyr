@@ -24,7 +24,7 @@ import sys
 import shutil
 
 from elftools.elf.elffile import ELFFile
-from llext_elf_parser import write_field_to_header_bytearr
+from llext_elf_parser import write_field_in_struct_bytearr
 
 logger = logging.getLogger('strip')
 LOGGING_FORMAT = '[%(levelname)s][%(name)s] %(message)s'
@@ -130,21 +130,21 @@ def strip_arcextmap(f, bak):
 
     # Modify the section header table
     # Adjust size of .shstrtab
-    write_field_to_header_bytearr(elf, sht, 'sh_size', len(shstrtab), e_shstrndx)
+    write_field_in_struct_bytearr(elf, sht, 'sh_size', len(shstrtab), e_shstrndx)
 
     # Adjust sh_name, sh_offset, sh_link and sh_info for each section header
     for i, section in enumerate(sections):
-        write_field_to_header_bytearr(elf, sht, 'sh_name', sht_sh_names[i], i)
-        write_field_to_header_bytearr(elf, sht, 'sh_offset', sht_sh_offsets[i], i)
+        write_field_in_struct_bytearr(elf, sht, 'sh_name', sht_sh_names[i], i)
+        write_field_in_struct_bytearr(elf, sht, 'sh_offset', sht_sh_offsets[i], i)
 
         if section['sh_type'] == 'SHT_REL' or section['sh_type'] == 'SHT_RELA' \
             or section['sh_type'] == 'SHT_SYMTAB':
             sh_link = index_mapping[section['sh_link']]
-            write_field_to_header_bytearr(elf, sht, 'sh_link', sh_link, i)
+            write_field_in_struct_bytearr(elf, sht, 'sh_link', sh_link, i)
 
             if section['sh_type'] != 'SHT_SYMTAB':
                 sh_info = index_mapping[section['sh_info']]
-                write_field_to_header_bytearr(elf, sht, 'sh_info', sh_info, i)
+                write_field_in_struct_bytearr(elf, sht, 'sh_info', sh_info, i)
 
     # Write the section header table to the file
     e_shoff = f.tell()
@@ -153,9 +153,9 @@ def strip_arcextmap(f, bak):
     f.truncate()
 
     # Modify the ELF header
-    write_field_to_header_bytearr(elf, elfh, 'e_shoff', e_shoff)
-    write_field_to_header_bytearr(elf, elfh, 'e_shnum', e_shnum)
-    write_field_to_header_bytearr(elf, elfh, 'e_shstrndx', e_shstrndx)
+    write_field_in_struct_bytearr(elf, elfh, 'e_shoff', e_shoff)
+    write_field_in_struct_bytearr(elf, elfh, 'e_shnum', e_shnum)
+    write_field_in_struct_bytearr(elf, elfh, 'e_shstrndx', e_shstrndx)
 
     # Write back the ELF header
     f.seek(0)
