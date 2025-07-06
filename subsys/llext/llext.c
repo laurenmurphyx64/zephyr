@@ -314,18 +314,7 @@ void llext_bootstrap(struct llext *ext, llext_entry_fn_t entry_fn, void *user_da
 	}
 
 	/* Start extension main function */
-
-	// Print the first two bytes of the .text section for debugging
-	uint16_t *entry_fn_16 = (uint16_t *)(entry_fn);
-	printk("first 2 bytes of .text: %x\n", *entry_fn_16);
-
-	// __builtin_trap();
-
 	LOG_DBG("calling entry function %p(%p)", (void *)entry_fn, user_data);
-
-	// uint32_t blink_val;
-	// __asm__ volatile ("mov %0, lr" : "=r"(blink_val));
-	// printk("blink register (precall): %x\n", blink_val);
 
 	entry_fn(user_data);
 
