@@ -21,7 +21,7 @@ from enum import Enum
 from elftools.elf.elffile import ELFFile
 from elftools.elf.constants import SH_FLAGS
 from elftools.elf.constants import SHN_INDICES
-from llext_elf_parser import write_field_in_struct_bytearr
+from llext_elf_editor import write_field_in_struct_bytearr
 
 logger = logging.getLogger('reorder')
 LOGGING_FORMAT = '[%(levelname)s][%(name)s] %(message)s'
@@ -42,7 +42,8 @@ class LlextMem(Enum):
     LLEXT_MEM_COUNT = 11
 
 class LlextRegion():
-    def __init__(self):
+    def __init__(self, mem_idx):
+        self.mem_idx = mem_idx
         self.sections = []
         self.sh_type = None
         self.sh_flags = 0
@@ -88,7 +89,7 @@ def parse_args():
 
     return parser.parse_args()
 
-def get_region_for_section(elf, section):
+def get_region_for_section(elf, idx, section):
     if section['sh_type'] == 'SHT_SYMTAB' and elf.header['e_type'] == 'ET_REL':
         mem_idx = LlextMem.LLEXT_MEM_SYMTAB.value
     elif section['sh_type'] == 'SHT_DYNSYM' and elf.header['e_type'] == 'ET_DYN':
@@ -119,9 +120,9 @@ def get_region_for_section(elf, section):
         mem_idx = LlextMem.LLEXT_MEM_EXPORT.value
 
     if mem_idx == LlextMem.LLEXT_MEM_COUNT.value:
-        logger.debug(f'Section {section.name} skipped')
+        logger.debug(f'Section {idx} with name {section.name} not assigned to any region')
     else:
-        logger.debug(f'Section {section.name} assigned to region {LlextMem(mem_idx).value}')
+        logger.debug(f'Section {idx} with name {section.name} assigned to region {LlextMem(mem_idx).value}')
 
     return mem_idx
 
@@ -189,23 +190,23 @@ def reorder_sections(f, bak):
     bak_sht = bak.read(elf.header['e_shnum'] * elf.header['e_shentsize'])
 
     # Get list of sections ordered by region
-    region_for_sects = [None] * (LlextMem.LLEXT_MEM_COUNT.value + 1)
+    region_for_sects = []
     for i in range(LlextMem.LLEXT_MEM_COUNT.value + 1):
-        region_for_sects[i] = LlextRegion()
+        region_for_sects.append(LlextRegion(i))
 
-    for i, section in enumerate(elf.iter_sections(), start=1):
-        region_idx = get_region_for_section(elf, section)
+    sections = list(elf.iter_sections())
+    for i, section in enumerate(sections[1:], start=1):
+        region_idx = get_region_for_section(elf, i, section)
         region_for_sects[region_idx].add_section(section)
+
+        if section.name.startswith('.got') or section.name.startswith('.plt'):
+            logger.warning('Reordering not yet supported for .got / .plt sections')
+            return needs_reorder
 
     needs_reorder = needs_reordering(elf, region_for_sects)
 
     if not needs_reorder:
         return needs_reorder
-
-    for section in elf.iter_sections():
-        if section.name.startswith('.got') or section.name.startswith('.plt'):
-            logger.warning('Reordering not yet supported for .got / .plt sections')
-            return needs_reorder
 
     logger.debug('Reordering sections...')
 
@@ -215,16 +216,12 @@ def reorder_sections(f, bak):
         ordered_sections.extend(region_for_sects[mem_idx].sections)
 
     # Map unordered section indices to ordered indices (for sh_link)
-    index_mapping = {}
+    index_mapping = [0] * (elf.header['e_shnum'] + 1)
     for i, section in enumerate(ordered_sections):
         index_mapping[elf.get_section_index(section.name)] = i
 
     # Write out sections and build updated section header table
     for i, section in enumerate(ordered_sections):
-        if section.name == '.shstrtab':
-            e_shstrndx = i
-            logger.debug(f'e_shstrndx = {e_shstrndx}')
-
         # Accomodate for alignment
         sh_addralign = section['sh_addralign']
         # How many bytes we overshot alignment by
@@ -233,6 +230,10 @@ def reorder_sections(f, bak):
             f.seek(f.tell() + (sh_addralign - past_by))
             logger.debug(f'Adjusting section offset for sh_addralign {sh_addralign}')
         logger.debug(f'Section {i} at 0x{f.tell():x} with name {section.name}')
+
+        if section.name == '.shstrtab':
+            e_shstrndx = i
+            logger.debug(f'\te_shstrndx = {e_shstrndx}')
 
         # Add and update section header to the section header table
         bak_sht_idx = elf.get_section_index(section.name)
@@ -260,7 +261,7 @@ def reorder_sections(f, bak):
             for j in range(section['sh_size'] // section['sh_entsize']):
                 st_shndx = symtab.get_symbol(j).entry['st_shndx']
                 if st_shndx != 'SHN_UNDEF' and st_shndx != 'SHN_COMMON' and st_shndx != 'SHN_ABS':
-                    logger.debug('sym {} st_shndx updated from {} to {}'.format( \
+                    logger.debug('\tsym {} st_shndx updated from {} to {}'.format( \
                             j, st_shndx, index_mapping[st_shndx]))
                     st_shndx = index_mapping[st_shndx]
                     write_field_in_struct_bytearr(elf, data, 'st_shndx', st_shndx, j)
@@ -323,7 +324,7 @@ def main():
             os.rename(f'{args.file}.bak', args.file)
         else:
             logger.info('Sections reordered.')
-            os.remove(f'{args.file}.bak')
+            # os.remove(f'{args.file}.bak') # UNCOMMENT
     except Exception as e:
         logger.error(f'An error occurred while processing the file: {e}')
         sys.exit(1)

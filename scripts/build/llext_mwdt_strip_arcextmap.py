@@ -24,7 +24,7 @@ import sys
 import shutil
 
 from elftools.elf.elffile import ELFFile
-from llext_elf_parser import write_field_in_struct_bytearr
+from llext_elf_editor import write_field_in_struct_bytearr
 
 logger = logging.getLogger('strip')
 LOGGING_FORMAT = '[%(levelname)s][%(name)s] %(message)s'

@@ -47,8 +47,8 @@ def write_field_in_struct_bytearr(elf, bytearr, name, num, ent_idx = 0):
 
     size = get_field_size(header, name)
 
-    # ent_idx is 0 for ELF header fields
-    offset = (ent_idx * elf.header['e_shentsize']) + get_field_offset(header, name)
+    # ent_idx is 0 for ELF header
+    offset = (ent_idx * header.sizeof()) + get_field_offset(header, name)
 
     field = None
     if elf.little_endian:
