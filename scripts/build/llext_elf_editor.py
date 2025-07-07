@@ -4,7 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Functions to help read and rewrite ELF files.
+"""Functions to rewrite ELF files.
 
 Given a bytearray from an ELF file containing one or more entries
 (ELF header, section header table, symbol table), edit fields inline.

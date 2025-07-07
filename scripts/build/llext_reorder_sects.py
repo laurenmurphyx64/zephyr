@@ -51,6 +51,7 @@ class LlextRegion():
         self.sh_offset = 0
         self.sh_size = 0
         self.sh_info = None
+        self.sh_addralign = 0
 
     def add_section(self, section):
         if not self.sections: # First section in the region
@@ -60,7 +61,9 @@ class LlextRegion():
             self.sh_offset = section['sh_offset']
             self.sh_size = section['sh_size']
             self.sh_info = section['sh_info']
+            self.sh_addralign = section['sh_addralign']
         else:
+            # See llext_map_sections
             self.sh_addr = min(self.sh_addr, section['sh_addr'])
             self.sh_offset = min(self.sh_offset, section['sh_offset'])
             top_of_region = max(self.sh_offset + self.sh_size, \
@@ -95,9 +98,11 @@ def get_region_for_section(elf, idx, section):
     elif section['sh_type'] == 'SHT_DYNSYM' and elf.header['e_type'] == 'ET_DYN':
         mem_idx = LlextMem.LLEXT_MEM_SYMTAB.value
     elif section['sh_type'] == 'SHT_STRTAB':
-        mem_idx = LlextMem.LLEXT_MEM_STRTAB.value
-    elif section['sh_type'] == 'SHT_SHSTRTAB':
-        mem_idx = LlextMem.LLEXT_MEM_SHSTRTAB.value
+        if elf.header['e_shstrndx'] == idx:
+            mem_idx = LlextMem.LLEXT_MEM_SHSTRTAB.value
+        else:
+            mem_idx = LlextMem.LLEXT_MEM_STRTAB.value
+    # llext_map_sections
     elif section["sh_type"] == 'SHT_NOBITS':
         mem_idx = LlextMem.LLEXT_MEM_BSS.value
     elif section['sh_type'] == 'SHT_PROGBITS':
@@ -107,7 +112,10 @@ def get_region_for_section(elf, idx, section):
             mem_idx = LlextMem.LLEXT_MEM_DATA.value
         else:
             mem_idx = LlextMem.LLEXT_MEM_RODATA.value
-    elif section['sh_type'] == 'SHT_PREINIT_ARRAY':
+
+    # CONSIDER: THE PATH HERE IS NOT WHAT YOU THINK IT IS
+
+    if section['sh_type'] == 'SHT_PREINIT_ARRAY':
         mem_idx = LlextMem.LLEXT_MEM_PREINIT.value
     elif section['sh_type'] == 'SHT_INIT_ARRAY':
         mem_idx = LlextMem.LLEXT_MEM_INIT.value
@@ -120,21 +128,41 @@ def get_region_for_section(elf, idx, section):
         mem_idx = LlextMem.LLEXT_MEM_EXPORT.value
 
     if mem_idx == LlextMem.LLEXT_MEM_COUNT.value:
-        logger.debug(f'Section {idx} with name {section.name} not assigned to any region')
+        logger.debug(f'Section {idx} name {section.name} not assigned to any region')
     else:
-        logger.debug(f'Section {idx} with name {section.name} assigned to region {LlextMem(mem_idx).value}')
+        logger.debug('Section {} name {} maps to region {}'.format( \
+                     idx, section.name, mem_idx))
 
     return mem_idx
 
+# See llext_map_sections
 def needs_reordering(elf, region_for_sects):
+    x = None
+    y = None
     needs_reorder = False
-    # (See llext_map_sections)
-    for i in range(LlextMem.LLEXT_MEM_COUNT.value + 1):
-        for j in range(i + 1, LlextMem.LLEXT_MEM_COUNT.value + 1):
-            if region_for_sects[i].sh_type == 'SHT_NULL' or \
-               region_for_sects[i].sh_size == 0 or \
-               region_for_sects[j].sh_type == 'SHT_NULL' or \
-               region_for_sects[j].sh_size == 0:
+
+    for i in range(LlextMem.LLEXT_MEM_COUNT.value):
+        x = region_for_sects[i]
+
+        if x.sh_type == 'SHT_NULL' or x.sh_size == 0:
+            continue
+        
+        prepad = x.sh_offset & (x.sh_addralign - 1)
+
+        if elf.header['e_type'] == 'ET_DYN':
+            x.sh_addr -= prepad
+
+        x.sh_offset -= prepad
+        x.sh_size += prepad
+        x.sh_info = prepad
+
+    for i in range(LlextMem.LLEXT_MEM_COUNT.value):
+        for j in range(i + 1, LlextMem.LLEXT_MEM_COUNT.value):
+            x = region_for_sects[i]
+            y = region_for_sects[j]
+
+            if x.sh_type == 'SHT_NULL' or x.sh_size == 0 or \
+               y.sh_type == 'SHT_NULL' or y.sh_size == 0:
                 continue
 
             if (i == LlextMem.LLEXT_MEM_DATA.value or \
@@ -147,10 +175,12 @@ def needs_reordering(elf, region_for_sects):
                 continue
 
             if (elf.header['e_type'] == 'ET_DYN') and \
-                (region_for_sects[i].sh_flags & SH_FLAGS.SHF_ALLOC) and \
-                (region_for_sects[j].sh_flags & SH_FLAGS.SHF_ALLOC):
-                if region_for_sects[i].overlaps('sh_addr', region_for_sects[j]):
-                    logger.debug(f'Region {i} VMA range overlaps with {j}')
+                (x.sh_flags & SH_FLAGS.SHF_ALLOC) and \
+                (y.sh_flags & SH_FLAGS.SHF_ALLOC):
+                if x.overlaps('sh_addr', y):
+                    logger.debug('Region {} VMA range ({}-{}) overlaps with {} ({}-{})'.format( \
+                        i, hex(x.bottom('sh_addr')), hex(x.top('sh_addr')), \
+                        j, hex(y.bottom('sh_addr')), hex(y.top('sh_addr'))))
                     needs_reorder = True
                     break
 
@@ -158,8 +188,10 @@ def needs_reordering(elf, region_for_sects):
                j == LlextMem.LLEXT_MEM_BSS.value:
                 continue
 
-            if region_for_sects[i].overlaps('sh_offset', region_for_sects[j]):
-                logger.debug(f'Region {i} ELF file range overlaps with {j}')
+            if x.overlaps('sh_offset', y):
+                logger.debug('Region {} ({}-{}) overlaps with {} ({}-{})'.format( \
+                        i, hex(x.bottom('sh_offset')), hex(x.top('sh_offset')), \
+                        j, hex(y.bottom('sh_offset')), hex(y.top('sh_offset'))))
                 needs_reorder = True
                 break
 
@@ -199,14 +231,16 @@ def reorder_sections(f, bak):
         region_idx = get_region_for_section(elf, i, section)
         region_for_sects[region_idx].add_section(section)
 
+    reorder = needs_reordering(elf, region_for_sects)
+
+    if not reorder:
+        logger.warning('No reordering needed')
+        return reorder
+
+    for i, section in enumerate(sections):
         if section.name.startswith('.got') or section.name.startswith('.plt'):
             logger.warning('Reordering not yet supported for .got / .plt sections')
-            return needs_reorder
-
-    needs_reorder = needs_reordering(elf, region_for_sects)
-
-    if not needs_reorder:
-        return needs_reorder
+            return not reorder
 
     logger.debug('Reordering sections...')
 
@@ -282,7 +316,7 @@ def reorder_sections(f, bak):
     f.seek(0)
     f.write(elfh)
 
-    return needs_reorder
+    return reorder
 
 def main():
     args = parse_args()
