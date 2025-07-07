@@ -308,7 +308,7 @@ def main():
     logger.debug(f'File to reorder for LLEXT: {args.file}')
 
     try:
-        # Copy extension.llext to extension.llext.bak
+        # Backup extension.llext
         shutil.copy(args.file, f'{args.file}.bak')
 
         reordered = False
@@ -323,8 +323,8 @@ def main():
             os.remove(f'{args.file}')
             os.rename(f'{args.file}.bak', args.file)
         else:
-            logger.info('Sections reordered.')
-            # os.remove(f'{args.file}.bak') # UNCOMMENT
+            logger.info('Sections reordered')
+            os.remove(f'{args.file}.bak')
     except Exception as e:
         logger.error(f'An error occurred while processing the file: {e}')
         sys.exit(1)
