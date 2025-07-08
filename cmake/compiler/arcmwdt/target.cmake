@@ -25,13 +25,10 @@ string(REPLACE ";" " " CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
 set(NOSTDINC ${TOOLCHAIN_HOME}/arc/inc)
 
 set(LLEXT_APPEND_FLAGS
-  # -O2
   -nog
-  -save-temps
 )
 
 set(LLEXT_REMOVE_FLAGS
-  # -Os
   -ffunction-sections
   -fdata-sections
 )
