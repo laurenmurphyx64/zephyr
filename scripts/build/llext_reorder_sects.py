@@ -93,6 +93,7 @@ def parse_args():
     return parser.parse_args()
 
 def get_region_for_section(elf, idx, section):
+    # llext_find_tables
     if section['sh_type'] == 'SHT_SYMTAB' and elf.header['e_type'] == 'ET_REL':
         mem_idx = LlextMem.LLEXT_MEM_SYMTAB.value
     elif section['sh_type'] == 'SHT_DYNSYM' and elf.header['e_type'] == 'ET_DYN':
@@ -103,7 +104,7 @@ def get_region_for_section(elf, idx, section):
         else:
             mem_idx = LlextMem.LLEXT_MEM_STRTAB.value
     # llext_map_sections
-    elif section["sh_type"] == 'SHT_NOBITS':
+    elif section['sh_type'] == 'SHT_NOBITS':
         mem_idx = LlextMem.LLEXT_MEM_BSS.value
     elif section['sh_type'] == 'SHT_PROGBITS':
         if section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR:
@@ -112,16 +113,16 @@ def get_region_for_section(elf, idx, section):
             mem_idx = LlextMem.LLEXT_MEM_DATA.value
         else:
             mem_idx = LlextMem.LLEXT_MEM_RODATA.value
-
-    # CONSIDER: THE PATH HERE IS NOT WHAT YOU THINK IT IS
-
-    if section['sh_type'] == 'SHT_PREINIT_ARRAY':
+    elif section['sh_type'] == 'SHT_PREINIT_ARRAY':
         mem_idx = LlextMem.LLEXT_MEM_PREINIT.value
     elif section['sh_type'] == 'SHT_INIT_ARRAY':
         mem_idx = LlextMem.LLEXT_MEM_INIT.value
     elif section['sh_type'] == 'SHT_FINI_ARRAY':
         mem_idx = LlextMem.LLEXT_MEM_FINI.value
     else:
+        mem_idx = LlextMem.LLEXT_MEM_COUNT.value
+
+    if not (section['sh_flags'] & SH_FLAGS.SHF_ALLOC) or section['sh_size'] == 0:
         mem_idx = LlextMem.LLEXT_MEM_COUNT.value
 
     if section.name == '.exported_sym':
@@ -234,15 +235,19 @@ def reorder_sections(f, bak):
     reorder = needs_reordering(elf, region_for_sects)
 
     if not reorder:
-        logger.warning('No reordering needed')
+        logger.info('No reordering needed')
         return reorder
+
+    if elf.header['e_type'] == 'ET_DYN' or elf.header['e_type'] == 'ET_EXEC':
+        logger.warning('Reordering needed, but not yet supported for ET_DYN / ET_EXEC files')
+        return not reorder
 
     for i, section in enumerate(sections):
         if section.name.startswith('.got') or section.name.startswith('.plt'):
-            logger.warning('Reordering not yet supported for .got / .plt sections')
+            logger.warning('Reordering needed, but not yet supported for .got / .plt sections')
             return not reorder
 
-    logger.debug('Reordering sections...')
+    logger.info('Reordering sections...')
 
     # Create ordered list of sections
     ordered_sections = [elf.get_section(0)]
@@ -357,8 +362,7 @@ def main():
             os.remove(f'{args.file}')
             os.rename(f'{args.file}.bak', args.file)
         else:
-            logger.info('Sections reordered')
-            os.remove(f'{args.file}.bak')
+            logger.warning(f'Sections reordered. Backup saved at {args.file}.bak')
     except Exception as e:
         logger.error(f'An error occurred while processing the file: {e}')
         sys.exit(1)
