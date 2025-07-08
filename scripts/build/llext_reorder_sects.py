@@ -141,6 +141,7 @@ def needs_reordering(elf, region_for_sects):
     x = None
     y = None
     needs_reorder = False
+    is_virtual = False
 
     for i in range(LlextMem.LLEXT_MEM_COUNT.value):
         x = region_for_sects[i]
@@ -183,6 +184,7 @@ def needs_reordering(elf, region_for_sects):
                         i, hex(x.bottom('sh_addr')), hex(x.top('sh_addr')), \
                         j, hex(y.bottom('sh_addr')), hex(y.top('sh_addr'))))
                     needs_reorder = True
+                    is_virtual = True
                     break
 
             if i == LlextMem.LLEXT_MEM_BSS.value or \
@@ -196,10 +198,16 @@ def needs_reordering(elf, region_for_sects):
                 needs_reorder = True
                 break
 
-    return needs_reorder
+    return needs_reorder, is_virtual
 
 def reorder_sections(f, bak):
+    reorder = False
+
     elf = ELFFile(bak)
+
+    if elf.header['e_type'] == 'ET_CORE':
+        logger.warning('Script not applicable to ET_CORE files')
+        return reorder
 
     elfh = bytearray()
 
@@ -210,13 +218,16 @@ def reorder_sections(f, bak):
 
     sht = bytearray()
 
-    # Read in ELF header
-    bak.seek(0) # elftools moves the file pointer
+    # Read in and write out ELF header (to move file pointer forward)
+    bak.seek(0)
     elfh += bak.read(elf.header['e_ehsize'])
-
-    # Write out to move the file pointer forward past the ELF header
-    # We will update it later
     f.write(elfh)
+
+    # Read in program header table (if present) and write it out
+    if elf.header['e_phnum'] > 0:
+        bak.seek(elf.header['e_phoff'])
+        phdrs = bak.read(elf.header['e_phnum'] * elf.header['e_phentsize'])
+        f.write(phdrs)
 
     # Read in section header table
     bak.seek(elf.header['e_shoff'])
@@ -232,20 +243,20 @@ def reorder_sections(f, bak):
         region_idx = get_region_for_section(elf, i, section)
         region_for_sects[region_idx].add_section(section)
 
-    reorder = needs_reordering(elf, region_for_sects)
+    reorder, is_virtual = needs_reordering(elf, region_for_sects)
 
     if not reorder:
         logger.info('No reordering needed')
         return reorder
 
-    if elf.header['e_type'] == 'ET_DYN' or elf.header['e_type'] == 'ET_EXEC':
-        logger.warning('Reordering needed, but not yet supported for ET_DYN / ET_EXEC files')
+    if is_virtual:
+        logger.warning('Reordering needed, but not supported for VMA overlaps')
         return not reorder
 
-    for i, section in enumerate(sections):
-        if section.name.startswith('.got') or section.name.startswith('.plt'):
-            logger.warning('Reordering needed, but not yet supported for .got / .plt sections')
-            return not reorder
+    if elf.header['e_type'] == 'ET_DYN' or elf.header['e_type'] == 'ET_EXEC':
+        # Need to adjust PLT / GOT sections, possibly sh_addr
+        logger.warning('Reordering needed, but not yet supported for ET_DYN / ET_EXEC files')
+        return not reorder
 
     logger.info('Reordering sections...')
 

@@ -37,6 +37,10 @@ def parse_args():
 def strip_arcextmap(f, bak):
     elf = ELFFile(bak)
 
+    if elf.header['e_type'] == 'ET_CORE':
+        logger.warning('Script not applicable to ET_CORE files')
+        return
+
     elfh = bytearray()
 
     e_shentsize = elf.header['e_shentsize']
@@ -44,23 +48,27 @@ def strip_arcextmap(f, bak):
     e_shoff = 0
 
     sht = bytearray()
+    pht = bytearray()
 
     sht_sh_offsets = []
     sht_sh_names = []
 
     shstrtab = bytearray()
 
-    # Read in ELF header
-    bak.seek(0) # elftools moves the file pointer
+    # Read in ELF header (to move file pointer forward)
+    bak.seek(0)
     elfh += bak.read(elf.header['e_ehsize'])
+    f.write(elfh)
+
+    # Read in program header table (if present) and write it out
+    if elf.header['e_phnum'] > 0:
+        bak.seek(elf.header['e_phoff'])
+        pht += bak.read(elf.header['e_phnum'] * elf.header['e_phentsize'])
+        f.write(pht)
 
     # Read in section header table
     bak.seek(elf.header['e_shoff'])
     sht += bak.read(elf.header['e_shnum'] * e_shentsize)
-
-    # Write out the ELF header to move the file pointer forward
-    # We will correct it inline later
-    f.write(elfh)
 
     # Rebuild the section header string table
     sh_name = 0
@@ -144,12 +152,12 @@ def main():
             sys.exit(1)
 
     try:
-        # Copy extension.llext to extension.llext.bak
+        # Back up extension.llext
         shutil.copy(args.file, f'{args.file}.bak')
 
         # Read from extension.llext.bak
         with open(f'{args.file}.bak', 'rb') as bak:
-            # Write sections to keep one by one to extension.llext
+            # Write out to extension.llext
             with open(args.file, 'wb') as f:
                 strip_arcextmap(f, bak)
 
