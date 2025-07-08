@@ -344,16 +344,14 @@ def main():
             logger.error(f'File {args.file} is not a valid ELF file, exiting...')
             sys.exit(1)
 
-    logger.debug(f'File to reorder for LLEXT: {args.file}')
-
     try:
-        # Backup extension.llext
+        # Back up extension.llext
         shutil.copy(args.file, f'{args.file}.bak')
 
         reordered = False
         # Read from extension.llext.bak
         with open(f'{args.file}.bak', 'rb') as bak:
-            # Write sections to keep one by one to extension.llext
+            # Write out to extension.llext
             with open(args.file, 'wb') as f:
                 reordered = reorder_sections(f, bak)
 

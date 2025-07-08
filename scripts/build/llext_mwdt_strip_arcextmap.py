@@ -4,17 +4,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-'''Strip arcextmap-related info and sections.
+'''Strip arcextmap names from section header string table
 
 The MWDT strip utility does not strip the names of stripped sections from the
-section header string table. This script is a workaround to remove unused
-names from the section header string table, shrinking the file size. This is
+section header string table. This script is a workaround to remove unused .arcextmap.*
+names from the section header string table, dramatically shrinking the file size. This is
 necessary for boards where MWDT CCAC emits debugging sections like .arcextmap.*,
 as even the smallest extension (<1k) will have a >16KB section header string table.
-
-This script is also able to remove the sections themselves, not just their names,
-should they appear in the ELF. This will happen if strip is not given the
-'strip unallocated' option for whatever reason.
 '''
 
 import argparse
@@ -26,9 +22,8 @@ import shutil
 from elftools.elf.elffile import ELFFile
 from llext_elf_editor import write_field_in_struct_bytearr
 
-logger = logging.getLogger('strip')
+logger = logging.getLogger('strip-arcextmap-names')
 LOGGING_FORMAT = '[%(levelname)s][%(name)s] %(message)s'
-
 
 def parse_args():
     parser = argparse.ArgumentParser(allow_abbrev=False)
@@ -39,17 +34,7 @@ def parse_args():
 
     return parser.parse_args()
 
-
 def strip_arcextmap(f, bak):
-    '''Remove .arcextmap.* sections from the ELF file.
-
-    This function reads in from a copy of the ELF file and copies over its
-    sections, skipping any sections with names of the form .arcextmap.* It also makes
-    necessary adjustments to the ELF header, section header table, and creates a
-    copy of the section header string table without the unused names, which it
-    writes as the last section of the file before the section header table.
-    '''
-
     elf = ELFFile(bak)
 
     elfh = bytearray()
@@ -57,16 +42,11 @@ def strip_arcextmap(f, bak):
     e_shentsize = elf.header['e_shentsize']
 
     e_shoff = 0
-    e_shnum = 0
-    e_shstrndx = 0
 
     sht = bytearray()
 
     sht_sh_offsets = []
     sht_sh_names = []
-
-    sections = [] # Sections to be copied over
-    index_mapping = {} # Maps section index in original to copy
 
     shstrtab = bytearray()
 
@@ -74,93 +54,73 @@ def strip_arcextmap(f, bak):
     bak.seek(0) # elftools moves the file pointer
     elfh += bak.read(elf.header['e_ehsize'])
 
-    # Move the file pointer forward past the ELF header
+    # Read in section header table
+    bak.seek(elf.header['e_shoff'])
+    sht += bak.read(elf.header['e_shnum'] * e_shentsize)
+
+    # Write out the ELF header to move the file pointer forward
     # We will correct it inline later
     f.write(elfh)
 
-    # Write out sections except .arcextmap.* and .shstrtab
-    # Copy in section headers except .shstrtab
+    # Rebuild the section header string table
     sh_name = 0
-    sh_idx = 0
     for i, section in enumerate(elf.iter_sections()):
-        if not section.name.startswith('.arcextmap') and section.name != '.shstrtab':
-            sections.append(section)
-            index_mapping[i] = sh_idx
+        shstrtab += section.name.encode('utf-8') + b'\x00'
+        sht_sh_names.append(sh_name)
+        sh_name += len(section.name) + 1
 
-            shstrtab += section.name.encode('utf-8') + b'\x00'
-            sht_sh_names.append(sh_name)
-            sh_name += len(section.name) + 1
+    shstrtab_sh_size = len(shstrtab)
+    logger.debug('.shstrtab sh_size shrunk from {} to {} bytes'.format(
+            elf.get_section(elf.header['e_shstrndx'])['sh_size'], shstrtab_sh_size))
 
+    # Write out sections and update headers
+    for i, section in enumerate(elf.iter_sections()):
+        if elf.header['e_shstrndx'] == i:
+            section_data = shstrtab
+            write_field_in_struct_bytearr(elf, sht, 'sh_size', shstrtab_sh_size, i)
+        else:
             bak.seek(section['sh_offset'])
             section_data = bak.read(section['sh_size'])
 
-            # Accomodate for alignment
-            sh_addralign = section['sh_addralign']
-            # How many bytes we overshot alignment by
-            past_by = f.tell() % sh_addralign if sh_addralign != 0 else 0
-            if past_by > 0:
-                f.seek(f.tell() + (sh_addralign - past_by))
+        # Accomodate for alignment
+        sh_addralign = section['sh_addralign']
+        # How many bytes we overshot alignment by
+        past_by = f.tell() % sh_addralign if sh_addralign != 0 else 0
+        if past_by > 0:
+            logger.debug('Padding section {} by {} bytes to align by {}'.format( \
+                i, sh_addralign - past_by, sh_addralign))
+            f.seek(f.tell() + (sh_addralign - past_by))
 
-            sht_sh_offsets.append(f.tell())
-            f.write(section_data)
+        sht_sh_offsets.append(f.tell())
 
-            bak.seek(elf.header['e_shoff'] + (i * e_shentsize))
-            section_header = bak.read(e_shentsize)
-            sht += section_header
+        logger.debug('Section {} read from {}, written at {}'.format(
+            i, hex(section['sh_offset']), hex(sht_sh_offsets[i])))
+        f.write(section_data)
 
-            sh_idx += 1
-
-    # Write .shstrtab as the last section
-    # Copy in .shstrtab section header
-    e_shstrndx = sh_idx
-    e_shnum = sh_idx + 1
-
-    sections.append(elf.get_section_by_name('.shstrtab'))
-    index_mapping[elf.header['e_shstrndx']] = e_shstrndx
-
-    shstrtab += '.shstrtab'.encode('utf-8') + b'\x00'
-    sht_sh_names.append(sh_name)
-
-    sht_sh_offsets.append(f.tell())
-    f.write(shstrtab)
-
-    bak.seek(elf.header['e_shoff'] + (elf.header['e_shstrndx'] * e_shentsize))
-    shstrtab_header = bak.read(e_shentsize)
-    sht += shstrtab_header
-
-    # Modify the section header table
-    # Adjust size of .shstrtab
-    write_field_in_struct_bytearr(elf, sht, 'sh_size', len(shstrtab), e_shstrndx)
-
-    # Adjust sh_name, sh_offset, sh_link and sh_info for each section header
-    for i, section in enumerate(sections):
+        # Update entry in section header table
         write_field_in_struct_bytearr(elf, sht, 'sh_name', sht_sh_names[i], i)
         write_field_in_struct_bytearr(elf, sht, 'sh_offset', sht_sh_offsets[i], i)
 
-        if section['sh_type'] == 'SHT_REL' or section['sh_type'] == 'SHT_RELA' \
-            or section['sh_type'] == 'SHT_SYMTAB':
-            sh_link = index_mapping[section['sh_link']]
-            write_field_in_struct_bytearr(elf, sht, 'sh_link', sh_link, i)
-
-            if section['sh_type'] != 'SHT_SYMTAB':
-                sh_info = index_mapping[section['sh_info']]
-                write_field_in_struct_bytearr(elf, sht, 'sh_info', sh_info, i)
+        name_end = shstrtab[sht_sh_names[i]:].find(b'\x00')
+        if name_end != -1:
+            name = shstrtab[sht_sh_names[i]:sht_sh_names[i] + name_end].decode('utf-8')
+            logger.debug('Section {} name read as {}, written out as {}'.format(
+                i, section.name, name))
+        else:
+            logger.error(f'Unable to find null terminated string for section {i} in shrunk shstrtab')
 
     # Write the section header table to the file
     e_shoff = f.tell()
     f.write(sht)
 
-    f.truncate()
+    f.truncate() # File has shrunk signifcantly, truncate to remove excess
 
     # Modify the ELF header
     write_field_in_struct_bytearr(elf, elfh, 'e_shoff', e_shoff)
-    write_field_in_struct_bytearr(elf, elfh, 'e_shnum', e_shnum)
-    write_field_in_struct_bytearr(elf, elfh, 'e_shstrndx', e_shstrndx)
 
     # Write back the ELF header
     f.seek(0)
     f.write(elfh)
-
 
 def main():
     args = parse_args()
@@ -183,8 +143,6 @@ def main():
             logger.error(f'File {args.file} is not a valid ELF file, exiting...')
             sys.exit(1)
 
-    logger.debug(f'File to strip .arcextmap.*: {args.file}')
-
     try:
         # Copy extension.llext to extension.llext.bak
         shutil.copy(args.file, f'{args.file}.bak')
@@ -199,7 +157,6 @@ def main():
     except Exception as e:
         logger.error(f'An error occurred while processing the file: {e}')
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
