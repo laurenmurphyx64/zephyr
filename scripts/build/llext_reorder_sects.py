@@ -54,6 +54,11 @@ class LlextRegion():
         self.sh_addralign = 0
 
     def add_section(self, section):
+        # Causes unexpected reordering if detached section doesn't have name of type ".detach.*"
+        if section.name.startswith('.detach'):
+            logger.debug(f'Section {section.name} is detached, not expanding region')
+            return
+
         if not self.sections: # First section in the region
             self.sh_type = section['sh_type']
             self.sh_flags = section['sh_flags']
@@ -65,10 +70,12 @@ class LlextRegion():
         else:
             # See llext_map_sections
             self.sh_addr = min(self.sh_addr, section['sh_addr'])
-            self.sh_offset = min(self.sh_offset, section['sh_offset'])
+            bottom_of_region = min(self.sh_offset, section['sh_offset'])
             top_of_region = max(self.sh_offset + self.sh_size, \
                                 section['sh_offset'] + section['sh_size'])
-            self.sh_size = top_of_region - self.sh_offset
+            self.sh_offset = bottom_of_region
+            self.sh_size = top_of_region - bottom_of_region
+            self.sh_addralign = max(self.sh_addralign, section['sh_addralign'])
         self.sections.append(section)
 
     def bottom(self, field):
@@ -93,6 +100,8 @@ def parse_args():
     return parser.parse_args()
 
 def get_region_for_section(elf, idx, section):
+    mem_idx = LlextMem.LLEXT_MEM_COUNT.value
+
     # llext_find_tables
     if section['sh_type'] == 'SHT_SYMTAB' and elf.header['e_type'] == 'ET_REL':
         mem_idx = LlextMem.LLEXT_MEM_SYMTAB.value
@@ -103,30 +112,30 @@ def get_region_for_section(elf, idx, section):
             mem_idx = LlextMem.LLEXT_MEM_SHSTRTAB.value
         else:
             mem_idx = LlextMem.LLEXT_MEM_STRTAB.value
+
     # llext_map_sections
-    elif section['sh_type'] == 'SHT_NOBITS':
-        mem_idx = LlextMem.LLEXT_MEM_BSS.value
-    elif section['sh_type'] == 'SHT_PROGBITS':
-        if section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR:
-            mem_idx = LlextMem.LLEXT_MEM_TEXT.value
-        elif section['sh_flags'] & SH_FLAGS.SHF_WRITE:
-            mem_idx = LlextMem.LLEXT_MEM_DATA.value
-        else:
-            mem_idx = LlextMem.LLEXT_MEM_RODATA.value
-    elif section['sh_type'] == 'SHT_PREINIT_ARRAY':
-        mem_idx = LlextMem.LLEXT_MEM_PREINIT.value
-    elif section['sh_type'] == 'SHT_INIT_ARRAY':
-        mem_idx = LlextMem.LLEXT_MEM_INIT.value
-    elif section['sh_type'] == 'SHT_FINI_ARRAY':
-        mem_idx = LlextMem.LLEXT_MEM_FINI.value
-    else:
-        mem_idx = LlextMem.LLEXT_MEM_COUNT.value
+    if mem_idx == LlextMem.LLEXT_MEM_COUNT.value:
+        if section['sh_type'] == 'SHT_NOBITS':
+            mem_idx = LlextMem.LLEXT_MEM_BSS.value
+        elif section['sh_type'] == 'SHT_PROGBITS':
+            if section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR:
+                mem_idx = LlextMem.LLEXT_MEM_TEXT.value
+            elif section['sh_flags'] & SH_FLAGS.SHF_WRITE:
+                mem_idx = LlextMem.LLEXT_MEM_DATA.value
+            else:
+                mem_idx = LlextMem.LLEXT_MEM_RODATA.value
+        elif section['sh_type'] == 'SHT_PREINIT_ARRAY':
+            mem_idx = LlextMem.LLEXT_MEM_PREINIT.value
+        elif section['sh_type'] == 'SHT_INIT_ARRAY':
+            mem_idx = LlextMem.LLEXT_MEM_INIT.value
+        elif section['sh_type'] == 'SHT_FINI_ARRAY':
+            mem_idx = LlextMem.LLEXT_MEM_FINI.value
 
-    if not (section['sh_flags'] & SH_FLAGS.SHF_ALLOC) or section['sh_size'] == 0:
-        mem_idx = LlextMem.LLEXT_MEM_COUNT.value
+        if section.name == '.exported_sym':
+            mem_idx = LlextMem.LLEXT_MEM_EXPORT.value
 
-    if section.name == '.exported_sym':
-        mem_idx = LlextMem.LLEXT_MEM_EXPORT.value
+        if not (section['sh_flags'] & SH_FLAGS.SHF_ALLOC) or section['sh_size'] == 0:
+            mem_idx = LlextMem.LLEXT_MEM_COUNT.value
 
     if mem_idx == LlextMem.LLEXT_MEM_COUNT.value:
         logger.debug(f'Section {idx} name {section.name} not assigned to any region')
@@ -136,7 +145,7 @@ def get_region_for_section(elf, idx, section):
 
     return mem_idx
 
-# See llext_map_sections
+# llext_map_sections
 def needs_reordering(elf, region_for_sects):
     x = None
     y = None
@@ -250,12 +259,13 @@ def reorder_sections(f, bak):
         return reorder
 
     if is_virtual:
-        logger.warning('Reordering needed, but not supported for VMA overlaps')
+        logger.warning('Extension section reordering needed, but not supported for VMA overlaps')
         return not reorder
 
     if elf.header['e_type'] == 'ET_DYN' or elf.header['e_type'] == 'ET_EXEC':
         # Need to adjust PLT / GOT sections, possibly sh_addr
-        logger.warning('Reordering needed, but not yet supported for ET_DYN / ET_EXEC files')
+        logger.warning('Extension section reordering needed, but not yet supported for' + \
+                       'ET_DYN / ET_EXEC files')
         return not reorder
 
     logger.info('Reordering sections...')
@@ -371,7 +381,7 @@ def main():
             os.remove(f'{args.file}')
             os.rename(f'{args.file}.bak', args.file)
         else:
-            logger.warning(f'Sections reordered. Backup saved at {args.file}.bak')
+            logger.warning(f'Extension sections reordered. Backup saved at {args.file}.bak')
     except Exception as e:
         logger.error(f'An error occurred while processing the file: {e}')
         sys.exit(1)
