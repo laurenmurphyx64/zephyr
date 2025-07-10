@@ -150,7 +150,8 @@ def needs_reordering(elf, region_for_sects):
     x = None
     y = None
     needs_reorder = False
-    is_virtual = False
+    virtual = False
+    physical = False
 
     for i in range(LlextMem.LLEXT_MEM_COUNT.value):
         x = region_for_sects[i]
@@ -193,7 +194,7 @@ def needs_reordering(elf, region_for_sects):
                         i, hex(x.bottom('sh_addr')), hex(x.top('sh_addr')), \
                         j, hex(y.bottom('sh_addr')), hex(y.top('sh_addr'))))
                     needs_reorder = True
-                    is_virtual = True
+                    virtual = True
                     break
 
             if i == LlextMem.LLEXT_MEM_BSS.value or \
@@ -205,9 +206,10 @@ def needs_reordering(elf, region_for_sects):
                         i, hex(x.bottom('sh_offset')), hex(x.top('sh_offset')), \
                         j, hex(y.bottom('sh_offset')), hex(y.top('sh_offset'))))
                 needs_reorder = True
+                physical = True
                 break
 
-    return needs_reorder, is_virtual
+    return needs_reorder, virtual, physical
 
 def reorder_sections(f, bak):
     reorder = False
@@ -252,20 +254,17 @@ def reorder_sections(f, bak):
         region_idx = get_region_for_section(elf, i, section)
         region_for_sects[region_idx].add_section(section)
 
-    reorder, is_virtual = needs_reordering(elf, region_for_sects)
+    reorder, virtual, physical = needs_reordering(elf, region_for_sects)
 
     if not reorder:
         logger.info('No reordering needed')
         return reorder
 
-    if is_virtual:
-        logger.warning('Extension section reordering needed, but not supported for VMA overlaps')
-        return not reorder
-
     if elf.header['e_type'] == 'ET_DYN' or elf.header['e_type'] == 'ET_EXEC':
-        # Need to adjust PLT / GOT sections, possibly sh_addr
-        logger.warning('Extension section reordering needed, but not yet supported for' + \
-                       'ET_DYN / ET_EXEC files')
+        if virtual: logger.warning('Virtual memory regions overlap')
+        if physical: logger.warning('Physical memory regions overlap')
+        logger.warning('Extension section reordering needed. Give compiler a linker script' + \
+                       'to control memory layout for ET_DYN and ET_EXEC ELF files')
         return not reorder
 
     logger.info('Reordering sections...')
