@@ -266,7 +266,7 @@ void load_call_unload(const struct llext_test *test_case)
  */
 #define ELF_ALIGN __aligned(4096)
 
-static LLEXT_CONST uint8_t hello_world_ext[] LLEXT_SECT ELF_ALIGN = {
+static LLEXT_CONST uint8_t hello_world_ext[] ELF_ALIGN = {
 	#include "hello_world.inc"
 };
 LLEXT_LOAD_UNLOAD(hello_world,
@@ -328,7 +328,7 @@ static LLEXT_CONST uint8_t align_ext[] LLEXT_SECT ELF_ALIGN = {
 };
 LLEXT_LOAD_UNLOAD(align)
 
-static LLEXT_CONST uint8_t inspect_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t inspect_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "inspect.inc"
 };
 
@@ -407,7 +407,7 @@ ZTEST(llext, test_inspect)
 }
 
 #ifndef CONFIG_LLEXT_TYPE_ELF_OBJECT
-static LLEXT_CONST uint8_t multi_file_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t multi_file_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "multi_file.inc"
 };
 LLEXT_LOAD_UNLOAD(multi_file)
@@ -468,7 +468,7 @@ ZTEST(llext, test_inter_ext)
 #endif
 
 #if defined(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE) && defined(CONFIG_XTENSA)
-static LLEXT_CONST uint8_t pre_located_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t pre_located_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "pre_located.inc"
 };
 
@@ -496,7 +496,7 @@ ZTEST(llext, test_pre_located)
 #endif
 
 #if defined(CONFIG_LLEXT_STORAGE_WRITABLE)
-static LLEXT_CONST uint8_t find_section_ext[] ELF_ALIGN = {
+static LLEXT_CONST uint8_t find_section_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "find_section.inc"
 };
 
