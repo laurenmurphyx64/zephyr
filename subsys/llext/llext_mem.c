@@ -43,25 +43,6 @@ K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * 1024);
 #endif
 #endif
 
-#define DT_DRV_COMPAT arc_iccm
-#define IN_NODE(addr, node) \
-	((uintptr_t)(addr) >= DT_REG_ADDR(node) && \
-	 (uintptr_t)(addr) < DT_REG_ADDR(node) + DT_REG_SIZE(node)))
-
-static inline bool is_addr_executable(uintptr_t addr)
-{
-	if (!IS_ENABLED(CONFIG_HARVARD))
-		return true;
-
-	for (int i = 0; i < DT_NUM_INST(DT_DRV_COMPAT); i++) {
-		if (IN_NODE(addr, DT_INST(i, DT_DRV_COMPAT))) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
 /*
  * Initialize the memory partition associated with the specified memory region
  */
@@ -143,10 +124,20 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			/* Region has data in the file, check if peek() is supported */
 			ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
 			if (ext->mem[mem_idx]) {
+#ifdef CONFIG_HARVARD
+#define IN_NODE(inst, compat, operator) \
+	(((uintptr_t)(ext->mem[mem_idx]) >= DT_REG_ADDR(DT_INST(inst, compat)) && \
+	 (uintptr_t)(ext->mem[mem_idx] + region_alloc) <= DT_REG_ADDR(DT_INST(inst, compat)) + \
+	  DT_REG_SIZE(DT_INST(inst, compat)))) operator
+#define ADDR_EXECUTABLE \
+	DT_COMPAT_FOREACH_STATUS_OKAY_VARGS(arc_iccm, IN_NODE, ||) false
+#else
+#define ADDR_EXECUTABLE true
+#endif
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 					ldr_parm->pre_located) &&
 					(mem_idx != LLEXT_MEM_TEXT ||
-						is_addr_executable((uintptr_t)ext->mem[mem_idx]))) {
+						ADDR_EXECUTABLE)) {
 					/* Map this region directly to the ELF buffer */
 					llext_init_mem_part(ext, mem_idx,
 							    (uintptr_t)ext->mem[mem_idx],
@@ -155,8 +146,13 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 					return 0;
 				}
 
-				LOG_WRN("Cannot peek region %d: %p not aligned to %#zx",
-					mem_idx, ext->mem[mem_idx], (size_t)region_align);
+				if (mem_idx == LLEXT_MEM_TEXT & !ADDR_EXECUTABLE) {
+					LOG_WRN("Text region %d is not in executable memory: %p-%p",
+						mem_idx, ext->mem[mem_idx], ext->mem[mem_idx] + region_alloc);
+				} else if (!IS_ALIGNED(ext->mem[mem_idx], region_align)) {
+					LOG_WRN("Cannot peek region %d: %p not aligned to %#zx",
+						mem_idx, ext->mem[mem_idx], (size_t)region_align);
+				}
 			}
 		} else if (ldr_parm->pre_located) {
 			/*
