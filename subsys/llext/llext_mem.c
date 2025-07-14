@@ -34,12 +34,12 @@ struct k_heap llext_heap;
 bool llext_heap_inited;
 #else
 #ifdef CONFIG_HARVARD
-Z_HEAP_DEFINE_IN_SECT(llext_heap_iccm, (CONFIG_LLEXT_ICCM_HEAP_SIZE * 1024), \
-	__attribute__((section(".rodata.llext_heap_iccm"))));
-Z_HEAP_DEFINE_IN_SECT(llext_heap_dccm, (CONFIG_LLEXT_DCCM_HEAP_SIZE * 1024), \
-	__attribute__((section(".data.llext_heap_dccm"))));
+Z_HEAP_DEFINE_IN_SECT(llext_instr_heap, (CONFIG_LLEXT_INSTR_HEAP_SIZE * KB(1)), \
+	__attribute__((section(".rodata.llext_instr_heap"))));
+Z_HEAP_DEFINE_IN_SECT(llext_data_heap, (CONFIG_LLEXT_DATA_HEAP_SIZE * KB(1)), \
+	__attribute__((section(".data.llext_data_heap"))));
 #else
-K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * 1024);
+K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * KB(1));
 #endif
 #endif
 

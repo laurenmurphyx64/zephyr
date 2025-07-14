@@ -62,7 +62,7 @@ config LLEXT_HEAP_SIZE
 	help
 	  Heap size in kilobytes available to llext for dynamic allocation
 
-config LLEXT_ICCM_HEAP_SIZE
+config LLEXT_INSTR_HEAP_SIZE
 	int "llext ICCM heap memory size in kilobytes"
 	depends on !LLEXT_HEAP_DYNAMIC && HARVARD
 	default 4
@@ -70,7 +70,7 @@ config LLEXT_ICCM_HEAP_SIZE
 	  ICCM heap size in kilobytes available to llext for dynamic allocation.
 	  Only executable sections will be placed in this heap.
 
-config LLEXT_DCCM_HEAP_SIZE
+config LLEXT_DATA_HEAP_SIZE
 	int "llext DCCM heap memory size in kilobytes"
 	depends on !LLEXT_HEAP_DYNAMIC && HARVARD
 	default 8

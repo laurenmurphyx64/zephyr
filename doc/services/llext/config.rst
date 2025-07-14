@@ -16,17 +16,24 @@ The following option controls this allocation, when allocating a static heap.
         Size of the LLEXT heap in kilobytes.
 
 For boards using the Harvard architecture, the LLEXT heap is split into two:
-one heap in ICCM and another in DCCM. Extension text will be placed in ICCM,
-while data and metadata will be placed in DCCM. The following options control
-these allocations.
+one heap in instruction memory and another in data memory. The following options
+control these allocations.
 
-:kconfig:option:`CONFIG_LLEXT_ICCM_HEAP_SIZE`
+:kconfig:option:`CONFIG_LLEXT_INSTR_HEAP_SIZE`
 
-        Size of the LLEXT heap in ICCM in kilobytes.
+        Size of the LLEXT heap in instruction memory in kilobytes.
 
-:kconfig:option:`CONFIG_LLEXT_DCCM_HEAP_SIZE`
+:kconfig:option:`CONFIG_LLEXT_DATA_HEAP_SIZE`
 
-        Size of the LLEXT heap in ICCM in kilobytes.
+        Size of the LLEXT heap in data memory in kilobytes.
+
+.. note::
+   The LLEXT instruction heap is grouped with Zephyr .rodata, which the linker
+   typically places after .text in instruction memory.
+
+.. warning::
+   LLEXT will be unable to link and execute extensions if instruction memory
+   (i.e., memory the processor can fetch instructions from) is not writable.
 
 Alternatively the application can configure a dynamic heap using the following
 option.

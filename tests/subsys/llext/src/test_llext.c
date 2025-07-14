@@ -33,7 +33,8 @@ LOG_MODULE_REGISTER(test_llext);
 #define LLEXT_CONST const
 #endif
 
-#if CONFIG_LLEXT_STORAGE_WRITABLE && CONFIG_HARVARD
+#if CONFIG_HARVARD
+/* Place extension in executable memory to ensure text is executable in place */
 #define LLEXT_SECT Z_GENERIC_SECTION(.rodata_in_data)
 #else
 #define LLEXT_SECT
@@ -266,6 +267,11 @@ void load_call_unload(const struct llext_test *test_case)
  */
 #define ELF_ALIGN __aligned(4096)
 
+/*
+ * For CONFIG_HARVARD, if LLEXT_SECT is omitted, the linker places the extension
+ * in .data / data memory. Test to see if LLEXT will correctly detect this and copy the
+ * text region into the instruction memory heap
+ */
 static LLEXT_CONST uint8_t hello_world_ext[] ELF_ALIGN = {
 	#include "hello_world.inc"
 };
