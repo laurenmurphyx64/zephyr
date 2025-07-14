@@ -125,19 +125,19 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
 			if (ext->mem[mem_idx]) {
 #ifdef CONFIG_HARVARD
-#define IN_NODE(inst, compat, operator) \
-	(((uintptr_t)(ext->mem[mem_idx]) >= DT_REG_ADDR(DT_INST(inst, compat)) && \
-	 (uintptr_t)(ext->mem[mem_idx] + region_alloc) <= DT_REG_ADDR(DT_INST(inst, compat)) + \
-	  DT_REG_SIZE(DT_INST(inst, compat)))) operator
-#define ADDR_EXECUTABLE \
-	DT_COMPAT_FOREACH_STATUS_OKAY_VARGS(arc_iccm, IN_NODE, ||) false
+#ifdef CONFIG_ARC
+#define BASE_ADDR ext->mem[mem_idx]
+#define ALLOC region_alloc
 #else
-#define ADDR_EXECUTABLE true
+/* Check to be updated if any non-ARC boards using Harvard architecture is added;
+ * in the meantime, unconditionally copy text to instruction memory heap
+ */
+#define INSTR_FETCHABLE false
+#endif
 #endif
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 					ldr_parm->pre_located) &&
-					(mem_idx != LLEXT_MEM_TEXT ||
-						ADDR_EXECUTABLE)) {
+					((mem_idx != LLEXT_MEM_TEXT) || INSTR_FETCHABLE)) {
 					/* Map this region directly to the ELF buffer */
 					llext_init_mem_part(ext, mem_idx,
 							    (uintptr_t)ext->mem[mem_idx],
@@ -146,9 +146,10 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 					return 0;
 				}
 
-				if (mem_idx == LLEXT_MEM_TEXT & !ADDR_EXECUTABLE) {
-					LOG_WRN("Text region %d is not in executable memory: %p-%p",
-						mem_idx, ext->mem[mem_idx], ext->mem[mem_idx] + region_alloc);
+				if ((mem_idx == LLEXT_MEM_TEXT) && !INSTR_FETCHABLE) {
+					LOG_WRN("Cannot reuse ELF buffer for region %d, not instruction memory: %p-%p",
+						mem_idx, ext->mem[mem_idx], \
+						(void *)((uintptr_t)(ext->mem[mem_idx]) + region->sh_size));
 				} else if (!IS_ALIGNED(ext->mem[mem_idx], region_align)) {
 					LOG_WRN("Cannot peek region %d: %p not aligned to %#zx",
 						mem_idx, ext->mem[mem_idx], (size_t)region_align);
@@ -272,8 +273,12 @@ int llext_copy_regions(struct llext_loader *ldr, struct llext *ext,
 
 			/* only show sections mapped to program memory */
 			if (mem_idx < LLEXT_MEM_EXPORT) {
-				LOG_DBG("-s %s %#zx", name,
+				if (ldr_parm->section_detached && ldr_parm->section_detached(shdr)) {
+					LOG_DBG("-s %s %#zx", name, (size_t)llext_peek(ldr, shdr->sh_offset));
+				} else {
+					LOG_DBG("-s %s %#zx", name,
 					(size_t)ext->mem[mem_idx] + ldr->sect_map[i].offset);
+				}
 			}
 		}
 	}

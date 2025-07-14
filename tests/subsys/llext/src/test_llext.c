@@ -29,14 +29,11 @@ LOG_MODULE_REGISTER(test_llext);
 
 #ifdef CONFIG_LLEXT_STORAGE_WRITABLE
 #define LLEXT_CONST
+#if CONFIG_HARVARD
+#define LLEXT_SECT Z_GENERIC_SECTION(.rodata_in_data)
+#endif
 #else
 #define LLEXT_CONST const
-#endif
-
-#if CONFIG_HARVARD
-/* Place extension in executable memory to ensure text is executable in place */
-#define LLEXT_SECT Z_GENERIC_SECTION(.rodata_in_data)
-#else
 #define LLEXT_SECT
 #endif
 
@@ -550,6 +547,7 @@ ZTEST(llext, test_find_section)
 	llext_unload(&ext);
 }
 
+/* For Harvard architectures, the detached section must be placed in instruction memory. */
 static LLEXT_CONST uint8_t test_detached_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "detached_fn.inc"
 };
