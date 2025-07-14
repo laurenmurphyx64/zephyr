@@ -30,14 +30,19 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 #endif
 
 #ifdef CONFIG_LLEXT_HEAP_DYNAMIC
+#ifdef CONFIG_HARVARD
+struct k_heap llext_instr_heap;
+struct k_heap llext_data_heap;
+#else
 struct k_heap llext_heap;
+#endif
 bool llext_heap_inited;
 #else
 #ifdef CONFIG_HARVARD
-Z_HEAP_DEFINE_IN_SECT(llext_heap_iccm, (CONFIG_LLEXT_ICCM_HEAP_SIZE * 1024), \
-	__attribute__((section(".rodata.llext_heap_iccm"))));
-Z_HEAP_DEFINE_IN_SECT(llext_heap_dccm, (CONFIG_LLEXT_DCCM_HEAP_SIZE * 1024), \
-	__attribute__((section(".data.llext_heap_dccm"))));
+Z_HEAP_DEFINE_IN_SECT(llext_instr_heap, (CONFIG_LLEXT_INSTR_HEAP_SIZE * 1024), \
+	__attribute__((section(".text.llext_instr_heap"))));
+Z_HEAP_DEFINE_IN_SECT(llext_data_heap, (CONFIG_LLEXT_DATA_HEAP_SIZE * 1024), \
+	__attribute__((section(".data.llext_data_heap"))));
 #else
 K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * 1024);
 #endif
@@ -124,20 +129,27 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			/* Region has data in the file, check if peek() is supported */
 			ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
 			if (ext->mem[mem_idx]) {
-#ifdef CONFIG_HARVARD
+#if CONFIG_HARVARD
+#if CONFIG_ARC
 #define IN_NODE(inst, compat, operator) \
 	(((uintptr_t)(ext->mem[mem_idx]) >= DT_REG_ADDR(DT_INST(inst, compat)) && \
 	 (uintptr_t)(ext->mem[mem_idx] + region_alloc) <= DT_REG_ADDR(DT_INST(inst, compat)) + \
 	  DT_REG_SIZE(DT_INST(inst, compat)))) operator
-#define ADDR_EXECUTABLE \
-	DT_COMPAT_FOREACH_STATUS_OKAY_VARGS(arc_iccm, IN_NODE, ||) false
+#define INSTR_FETCHABLE \
+	(DT_COMPAT_FOREACH_STATUS_OKAY_VARGS(arc_iccm, IN_NODE, ||) false)
 #else
-#define ADDR_EXECUTABLE true
+/* Will need to be updated if any non-ARC boards using Harvard architecture is added;
+ * in the meantime, copy text to instruction heap unconditionally to make sure
+ * instructions can be fetched over instruction bus by the processor.
+ */
+#define INSTR_FETCHABLE false
+#endif
+#else
+#define INSTR_FETCHABLE true
 #endif
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 					ldr_parm->pre_located) &&
-					(mem_idx != LLEXT_MEM_TEXT ||
-						ADDR_EXECUTABLE)) {
+					((mem_idx != LLEXT_MEM_TEXT) || INSTR_FETCHABLE)) {
 					/* Map this region directly to the ELF buffer */
 					llext_init_mem_part(ext, mem_idx,
 							    (uintptr_t)ext->mem[mem_idx],
@@ -146,9 +158,10 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 					return 0;
 				}
 
-				if (mem_idx == LLEXT_MEM_TEXT & !ADDR_EXECUTABLE) {
-					LOG_WRN("Text region %d is not in executable memory: %p-%p",
-						mem_idx, ext->mem[mem_idx], ext->mem[mem_idx] + region_alloc);
+				if ((mem_idx == LLEXT_MEM_TEXT) && !INSTR_FETCHABLE) {
+					LOG_WRN("Cannot pre-locate text region %d, instructions not fetchable: %p-%p",
+						mem_idx, ext->mem[mem_idx], \
+						(void *)((uintptr_t)(ext->mem[mem_idx]) + region->sh_size));
 				} else if (!IS_ALIGNED(ext->mem[mem_idx], region_align)) {
 					LOG_WRN("Cannot peek region %d: %p not aligned to %#zx",
 						mem_idx, ext->mem[mem_idx], (size_t)region_align);
@@ -177,7 +190,7 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	/* Allocate a suitably aligned area for the region. */
 #ifdef CONFIG_HARVARD
 	if (region->sh_flags & SHF_EXECINSTR) {
-		ext->mem[mem_idx] = llext_aligned_alloc_iccm(region_align, region_alloc);
+		ext->mem[mem_idx] = llext_aligned_alloc_instr(region_align, region_alloc);
 	} else {
 		ext->mem[mem_idx] = llext_aligned_alloc(region_align, region_alloc);
 	}
@@ -333,7 +346,7 @@ void llext_free_regions(struct llext *ext)
 			LOG_DBG("freeing memory region %d", i);
 #ifdef CONFIG_HARVARD
 			if (i == LLEXT_MEM_TEXT) {
-				llext_free_iccm(ext->mem[i]);
+				llext_free_instr(ext->mem[i]);
 			} else {
 				llext_free(ext->mem[i]);
 			}
@@ -368,13 +381,23 @@ int llext_add_domain(struct llext *ext, struct k_mem_domain *domain)
 #endif
 }
 
+#ifdef CONFIG_HARVARD
+int llext_heap_init(void *instr_mem, size_t instr_bytes,
+		void *data_mem, size_t data_bytes)
+#else
 int llext_heap_init(void *mem, size_t bytes)
+#endif
 {
 #ifdef CONFIG_LLEXT_HEAP_DYNAMIC
 	if (llext_heap_inited) {
 		return -EEXIST;
 	}
+#ifdef CONFIG_HARVARD
+	k_heap_init(&llext_instr_heap, instr_mem, instr_bytes);
+	k_heap_init(&llext_data_heap, data_mem, data_bytes);
+#else
 	k_heap_init(&llext_heap, mem, bytes);
+#endif
 	llext_heap_inited = true;
 	return 0;
 #else

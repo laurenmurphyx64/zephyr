@@ -44,7 +44,7 @@ static inline bool llext_heap_is_inited(void)
 static inline void *llext_alloc(size_t bytes)
 {
 #ifdef CONFIG_HARVARD
-	extern struct k_heap llext_heap_dccm;
+	extern struct k_heap llext_data_heap;
 #else
 	extern struct k_heap llext_heap;
 #endif
@@ -55,7 +55,7 @@ static inline void *llext_alloc(size_t bytes)
 
 #ifdef CONFIG_HARVARD
 	/* LLEXT metadata */
-	return k_heap_alloc(&llext_heap_dccm, bytes, K_NO_WAIT);
+	return k_heap_alloc(&llext_data_heap, bytes, K_NO_WAIT);
 #else
 	return k_heap_alloc(&llext_heap, bytes, K_NO_WAIT);
 #endif
@@ -64,7 +64,7 @@ static inline void *llext_alloc(size_t bytes)
 static inline void *llext_aligned_alloc(size_t align, size_t bytes)
 {
 #ifdef CONFIG_HARVARD
-	extern struct k_heap llext_heap_dccm;
+	extern struct k_heap llext_data_heap;
 #else
 	extern struct k_heap llext_heap;
 #endif
@@ -75,7 +75,7 @@ static inline void *llext_aligned_alloc(size_t align, size_t bytes)
 
 #ifdef CONFIG_HARVARD
 	/* LLEXT metadata OR non-executable section */
-	return k_heap_aligned_alloc(&llext_heap_dccm, align, bytes, K_NO_WAIT);
+	return k_heap_aligned_alloc(&llext_data_heap, align, bytes, K_NO_WAIT);
 #else
 	return k_heap_aligned_alloc(&llext_heap, align, bytes, K_NO_WAIT);
 #endif
@@ -84,7 +84,7 @@ static inline void *llext_aligned_alloc(size_t align, size_t bytes)
 static inline void llext_free(void *ptr)
 {
 #ifdef CONFIG_HARVARD
-	extern struct k_heap llext_heap_dccm;
+	extern struct k_heap llext_data_heap;
 #else
 	extern struct k_heap llext_heap;
 #endif
@@ -94,33 +94,33 @@ static inline void llext_free(void *ptr)
 	}
 
 #ifdef CONFIG_HARVARD
-	k_heap_free(&llext_heap_dccm, ptr);
+	k_heap_free(&llext_data_heap, ptr);
 #else
 	k_heap_free(&llext_heap, ptr);
 #endif
 }
 
 #ifdef CONFIG_HARVARD
-static inline void *llext_aligned_alloc_iccm(size_t align, size_t bytes)
+static inline void *llext_aligned_alloc_instr(size_t align, size_t bytes)
 {
-	extern struct k_heap llext_heap_iccm;
+	extern struct k_heap llext_instr_heap;
 
 	if (!llext_heap_is_inited()) {
 		return NULL;
 	}
 
-	return k_heap_aligned_alloc(&llext_heap_iccm, align, bytes, K_NO_WAIT);
+	return k_heap_aligned_alloc(&llext_instr_heap, align, bytes, K_NO_WAIT);
 }
 
-static inline void llext_free_iccm(void *ptr)
+static inline void llext_free_instr(void *ptr)
 {
-	extern struct k_heap llext_heap_iccm;
+	extern struct k_heap llext_instr_heap;
 
 	if (!llext_heap_is_inited()) {
 		return;
 	}
 
-	k_heap_free(&llext_heap_iccm, ptr);
+	k_heap_free(&llext_instr_heap, ptr);
 }
 #endif
 

@@ -16,17 +16,25 @@ The following option controls this allocation, when allocating a static heap.
         Size of the LLEXT heap in kilobytes.
 
 For boards using the Harvard architecture, the LLEXT heap is split into two:
-one heap in ICCM and another in DCCM. Extension text will be placed in ICCM,
-while data and metadata will be placed in DCCM. The following options control
-these allocations.
+one heap in instruction memory for extension text, and another in data memory
+for extension data and metadata. The following options control these
+allocations.
 
-:kconfig:option:`CONFIG_LLEXT_ICCM_HEAP_SIZE`
+:kconfig:option:`CONFIG_LLEXT_INSTR_HEAP_SIZE`
 
-        Size of the LLEXT heap in ICCM in kilobytes.
+        Size of the LLEXT instruction heap in kilobytes.
 
-:kconfig:option:`CONFIG_LLEXT_DCCM_HEAP_SIZE`
+:kconfig:option:`CONFIG_LLEXT_DATA_HEAP_SIZE`
 
-        Size of the LLEXT heap in ICCM in kilobytes.
+        Size of the LLEXT data heap in kilobytes.
+
+.. note::
+   The LLEXT instruction heap is placed in the same memory region as Zephyr text
+   (.text) by the linker.
+
+.. warning::
+   LLEXT will be unable to link and execute extensions if instruction memory
+   (i.e., memory the processor can fetch instructions from) is not writable.
 
 Alternatively the application can configure a dynamic heap using the following
 option.
@@ -38,11 +46,18 @@ option.
         the application responsible for LLEXT heap allocation. Do not allocate
         LLEXT heap statically.
 
-        Application must call :c:func:`llext_heap_init` in order to assign a
+        An application must call :c:func:`llext_heap_init` in order to assign a
         buffer to be used as the LLEXT heap, otherwise LLEXT modules will not
         load. When the application does not need LLEXT functionality any more,
         it should call :c:func:`llext_heap_uninit` which releases control of
         the buffer back to the application.
+
+.. warning::
+
+   An application running on boards with the Harvard architecture must call
+   :c:func:`llext_heap_init` with a buffer for the instruction heap, its size,
+   a buffer for the data heap, and its size. The instruction heap buffer must be
+   writable.
 
 .. note::
 
