@@ -30,7 +30,12 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 #endif
 
 #ifdef CONFIG_LLEXT_HEAP_DYNAMIC
+#ifdef CONFIG_HARVARD
+struct k_heap llext_instr_heap;
+struct k_heap llext_data_heap;
+#else
 struct k_heap llext_heap;
+#endif
 bool llext_heap_inited;
 #else
 #ifdef CONFIG_HARVARD
@@ -373,13 +378,23 @@ int llext_add_domain(struct llext *ext, struct k_mem_domain *domain)
 #endif
 }
 
+#ifdef CONFIG_HARVARD
+int llext_heap_init(void *instr_mem, size_t instr_bytes,
+		void *data_mem, size_t data_bytes)
+#else
 int llext_heap_init(void *mem, size_t bytes)
+#endif
 {
 #ifdef CONFIG_LLEXT_HEAP_DYNAMIC
 	if (llext_heap_inited) {
 		return -EEXIST;
 	}
+#ifdef CONFIG_HARVARD
+	k_heap_init(&llext_instr_heap, instr_mem, instr_bytes);
+	k_heap_init(&llext_data_heap, data_mem, data_bytes);
+#else
 	k_heap_init(&llext_heap, mem, bytes);
+#endif
 	llext_heap_inited = true;
 	return 0;
 #else
