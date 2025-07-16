@@ -28,6 +28,10 @@ set(LLEXT_APPEND_FLAGS
   -nog
 )
 
+if(CONFIG_HARVARD AND CONFIG_LLEXT_TYPE_ELF_SHAREDLIB)
+list(APPEND LLEXT_APPEND_FLAGS -Hpictable -Wl,-Bpictable)
+endif()
+
 set(LLEXT_REMOVE_FLAGS
   -ffunction-sections
   -fdata-sections
