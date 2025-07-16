@@ -543,7 +543,11 @@ ZTEST(llext, test_find_section)
 }
 
 /* For Harvard architectures, the detached section must be placed in instruction memory. */
+#ifdef CONFIG_HARVARD
+static LLEXT_CONST uint8_t test_detached_ext[] Z_GENERIC_SECTION(.text) ELF_ALIGN = {
+#else
 static LLEXT_CONST uint8_t test_detached_ext[] ELF_ALIGN = {
+#endif
 	#include "detached_fn.inc"
 };
 
