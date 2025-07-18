@@ -315,6 +315,7 @@ void llext_bootstrap(struct llext *ext, llext_entry_fn_t entry_fn, void *user_da
 
 	/* Start extension main function */
 	LOG_DBG("calling entry function %p(%p)", (void *)entry_fn, user_data);
+
 	entry_fn(user_data);
 
 	/* Call de-initialization functions */

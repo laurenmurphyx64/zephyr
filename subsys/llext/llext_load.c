@@ -312,6 +312,32 @@ static int llext_map_sections(struct llext_loader *ldr, struct llext *ext,
 		 * regions.
 		 */
 		if (ldr_parm->section_detached && ldr_parm->section_detached(shdr)) {
+#ifdef CONFIG_HARVARD
+#ifdef CONFIG_ARC
+#define BASE_ADDR llext_peek(ldr, shdr->sh_offset)
+#define ALLOC shdr->sh_size
+#else
+/* Check to be updated if any non-ARC boards using Harvard architecture is added;
+ * in the meantime, proceed with a warning
+ */
+#define INSTR_FETCHABLE false
+#endif
+#endif
+			if (mem_idx == LLEXT_MEM_TEXT && !INSTR_FETCHABLE) {
+				/* Detached text sections execute in place instead of being copied into
+				 * the heap. For Harvard architectures, this means that if the section
+				 * is not in instruction memory, it cannot be executed.
+				 */
+#ifdef CONFIG_ARC
+				LOG_ERR("ELF buffer's detached text section %s not in instruction memory: %p-%p",
+					name, (void *)(llext_peek(ldr, shdr->sh_offset)),
+					(void *)(llext_peek(ldr, shdr->sh_offset) + shdr->sh_size));
+				return -ENOEXEC; 
+#else
+				LOG_WRN("Unknown if ELF buffer's detached text section %s is in " \
+					"instruction memory", name);
+#endif
+			}
 			continue;
 		}
 

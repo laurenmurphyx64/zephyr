@@ -10,6 +10,8 @@
 #include <zephyr/llext/llext.h>
 #include <zephyr/kernel.h>
 #include <zephyr/cache.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
@@ -28,10 +30,22 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 #endif
 
 #ifdef CONFIG_LLEXT_HEAP_DYNAMIC
+#ifdef CONFIG_HARVARD
+struct k_heap llext_instr_heap;
+struct k_heap llext_data_heap;
+#else
 struct k_heap llext_heap;
+#endif
 bool llext_heap_inited;
 #else
-K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * 1024);
+#ifdef CONFIG_HARVARD
+Z_HEAP_DEFINE_IN_SECT(llext_instr_heap, (CONFIG_LLEXT_INSTR_HEAP_SIZE * KB(1)), \
+	__attribute__((section(".rodata.llext_instr_heap"))));
+Z_HEAP_DEFINE_IN_SECT(llext_data_heap, (CONFIG_LLEXT_DATA_HEAP_SIZE * KB(1)), \
+	__attribute__((section(".data.llext_data_heap"))));
+#else
+K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * KB(1));
+#endif
 #endif
 
 /*
@@ -115,8 +129,20 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			/* Region has data in the file, check if peek() is supported */
 			ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
 			if (ext->mem[mem_idx]) {
-				if (IS_ALIGNED(ext->mem[mem_idx], region_align) ||
-				    ldr_parm->pre_located) {
+#ifdef CONFIG_HARVARD
+#ifdef CONFIG_ARC
+#define BASE_ADDR ext->mem[mem_idx]
+#define ALLOC region_alloc
+#else
+/* Check to be updated if any non-ARC boards using Harvard architecture is added;
+ * in the meantime, unconditionally copy text to instruction memory heap
+ */
+#define INSTR_FETCHABLE false
+#endif
+#endif
+				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
+					ldr_parm->pre_located) &&
+					((mem_idx != LLEXT_MEM_TEXT) || INSTR_FETCHABLE)) {
 					/* Map this region directly to the ELF buffer */
 					llext_init_mem_part(ext, mem_idx,
 							    (uintptr_t)ext->mem[mem_idx],
@@ -125,8 +151,14 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 					return 0;
 				}
 
-				LOG_WRN("Cannot peek region %d: %p not aligned to %#zx",
-					mem_idx, ext->mem[mem_idx], (size_t)region_align);
+				if ((mem_idx == LLEXT_MEM_TEXT) && !INSTR_FETCHABLE) {
+					LOG_WRN("Cannot reuse ELF buffer for region %d, not instruction memory: %p-%p",
+						mem_idx, ext->mem[mem_idx], \
+						(void *)((uintptr_t)(ext->mem[mem_idx]) + region->sh_size));
+				} else if (!IS_ALIGNED(ext->mem[mem_idx], region_align)) {
+					LOG_WRN("Cannot peek region %d: %p not aligned to %#zx",
+						mem_idx, ext->mem[mem_idx], (size_t)region_align);
+				}
 			}
 		} else if (ldr_parm->pre_located) {
 			/*
@@ -149,7 +181,16 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	}
 
 	/* Allocate a suitably aligned area for the region. */
+#ifdef CONFIG_HARVARD
+	if (region->sh_flags & SHF_EXECINSTR) {
+		ext->mem[mem_idx] = llext_aligned_alloc_iccm(region_align, region_alloc);
+	} else {
+		ext->mem[mem_idx] = llext_aligned_alloc(region_align, region_alloc);
+	}
+#else
 	ext->mem[mem_idx] = llext_aligned_alloc(region_align, region_alloc);
+#endif
+
 	if (!ext->mem[mem_idx]) {
 		LOG_ERR("Failed allocating %zd bytes %zd-aligned for region %d",
 			(size_t)region_alloc, (size_t)region_align, mem_idx);
@@ -237,8 +278,12 @@ int llext_copy_regions(struct llext_loader *ldr, struct llext *ext,
 
 			/* only show sections mapped to program memory */
 			if (mem_idx < LLEXT_MEM_EXPORT) {
-				LOG_DBG("-s %s %#zx", name,
+				if (ldr_parm->section_detached && ldr_parm->section_detached(shdr)) {
+					LOG_DBG("-s %s %#zx", name, (size_t)llext_peek(ldr, shdr->sh_offset));
+				} else {
+					LOG_DBG("-s %s %#zx", name,
 					(size_t)ext->mem[mem_idx] + ldr->sect_map[i].offset);
+				}
 			}
 		}
 	}
@@ -296,7 +341,15 @@ void llext_free_regions(struct llext *ext)
 #endif
 		if (ext->mem_on_heap[i]) {
 			LOG_DBG("freeing memory region %d", i);
+#ifdef CONFIG_HARVARD
+			if (i == LLEXT_MEM_TEXT) {
+				llext_free_iccm(ext->mem[i]);
+			} else {
+				llext_free(ext->mem[i]);
+			}
+#else
 			llext_free(ext->mem[i]);
+#endif
 			ext->mem[i] = NULL;
 		}
 	}
@@ -325,13 +378,23 @@ int llext_add_domain(struct llext *ext, struct k_mem_domain *domain)
 #endif
 }
 
+#ifdef CONFIG_HARVARD
+int llext_heap_init(void *instr_mem, size_t instr_bytes,
+		void *data_mem, size_t data_bytes)
+#else
 int llext_heap_init(void *mem, size_t bytes)
+#endif
 {
 #ifdef CONFIG_LLEXT_HEAP_DYNAMIC
 	if (llext_heap_inited) {
 		return -EEXIST;
 	}
+#ifdef CONFIG_HARVARD
+	k_heap_init(&llext_instr_heap, instr_mem, instr_bytes);
+	k_heap_init(&llext_data_heap, data_mem, data_bytes);
+#else
 	k_heap_init(&llext_heap, mem, bytes);
+#endif
 	llext_heap_inited = true;
 	return 0;
 #else

@@ -400,6 +400,7 @@ ssize_t llext_find_section(struct llext_loader *loader, const char *search_name)
 int llext_get_section_header(struct llext_loader *loader, struct llext *ext,
 			     const char *search_name, elf_shdr_t *shdr);
 
+#ifndef CONFIG_HARVARD
 /**
  * @brief Initialize LLEXT heap dynamically
  *
@@ -412,6 +413,23 @@ int llext_get_section_header(struct llext_loader *loader, struct llext *ext,
  * @retval -ENOSYS Option @kconfig{CONFIG_LLEXT_HEAP_DYNAMIC} is not enabled or supported
  */
 int llext_heap_init(void *mem, size_t bytes);
+#else
+/**
+ * @brief Initialize LLEXT heap dynamically for Harvard architecture
+ *
+ * Use the provided memory blocks as the LLEXT heaps at runtime.
+ *
+ * @param instr_mem Pointer to instruction memory.
+ * @param instr_bytes Size of instruction memory region, in bytes
+ * @param data_mem Pointer to data memory.
+ * @param data_bytes Size of data memory region, in bytes
+ *
+ * @returns 0 on success, or a negative error code.
+ * @retval -ENOSYS Option @kconfig{CONFIG_LLEXT_HEAP_DYNAMIC} is not enabled or supported
+ */
+int llext_heap_init(void *instr_mem, size_t instr_bytes,
+		void *data_mem, size_t data_bytes);
+#endif
 
 /**
  * @brief Mark LLEXT heap as uninitialized.
