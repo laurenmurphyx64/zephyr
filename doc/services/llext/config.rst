@@ -57,6 +57,11 @@ option.
    large enough to allow the extension sections to be allocated with the
    alignment required by the architecture.
 
+.. note::
+   On Harvard architectures, :c:func:`llext_heap_init` accepts four arguments
+   instead of two: the instruction memory heap, its size, the data memory heap,
+   and its size.
+
 .. _llext_kconfig_type:
 
 ELF object type
