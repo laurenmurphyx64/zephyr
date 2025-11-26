@@ -45,11 +45,31 @@ tests:
     extra_configs:
       - CONFIG_LLEXT_STORAGE_WRITABLE=n
       - CONFIG_LLEXT_RODATA_NO_RELOC=y
+  llext.readonly.sys_mem_blocks:
+    arch_allow:               # Xtensa needs writable storage
+      - arm
+      - riscv
+      - arc
+      - x86
+    filter: not CONFIG_MPU and not CONFIG_MMU
+    extra_conf_files: ['no_mem_protection.conf', 'sys_mem_blocks.conf']
+    extra_configs:
+      - CONFIG_LLEXT_STORAGE_WRITABLE=n
+      - CONFIG_LLEXT_RODATA_NO_RELOC=y
   llext.readonly_mpu:
     arch_allow:
       - arm # Xtensa needs writable storage, currently not supported on RISC-V
       - arc
     filter: CONFIG_ARCH_HAS_USERSPACE
+    extra_configs:
+      - CONFIG_USERSPACE=y
+      - CONFIG_LLEXT_STORAGE_WRITABLE=n
+  llext.readonly_mpu.sys_mem_blocks:
+    arch_allow:
+      - arm # Xtensa needs writable storage, currently not supported on RISC-V
+      - arc
+    filter: CONFIG_ARCH_HAS_USERSPACE
+    extra_conf_files: ['sys_mem_blocks.conf']
     extra_configs:
       - CONFIG_USERSPACE=y
       - CONFIG_LLEXT_STORAGE_WRITABLE=n
@@ -64,6 +84,19 @@ tests:
       - qemu_cortex_a53         # ARM Cortex-A53 (ARMv8-A ISA)
     extra_configs:
       - CONFIG_LLEXT_HEAP_SIZE=128 # qemu_cortex_a9 requires larger heap
+      - CONFIG_LLEXT_STORAGE_WRITABLE=n
+      - CONFIG_LLEXT_RODATA_NO_RELOC=y
+  llext.readonly_mmu.sys_mem_blocks:
+    arch_allow:
+      - arm64
+      - arm
+      - riscv
+      - x86
+    filter: CONFIG_MMU or CONFIG_RISCV_PMP
+    extra_conf_files: ['sys_mem_blocks.conf']
+    integration_platforms:
+      - qemu_cortex_a53         # ARM Cortex-A53 (ARMv8-A ISA)
+    extra_configs:
       - CONFIG_LLEXT_STORAGE_WRITABLE=n
       - CONFIG_LLEXT_RODATA_NO_RELOC=y
   llext.writable:
@@ -95,6 +128,25 @@ tests:
       - qemu_xtensa/dc233c      # Xtensa ISA
     filter: not CONFIG_MPU and not CONFIG_MMU
     extra_conf_files: ['no_mem_protection.conf']
+    extra_configs:
+      - CONFIG_LLEXT_STORAGE_WRITABLE=y
+      - CONFIG_LLEXT_TYPE_ELF_RELOCATABLE=y
+  llext.writable_relocatable.sys_mem_blocks:
+    arch_allow:
+      - arm
+      - xtensa
+      - riscv
+      - arc
+      - x86
+    platform_exclude:
+      - qemu_arc/qemu_arc_hs5x     # See #80949
+      - nsim/nsim_hs5x             # See #80949
+      - nsim/nsim_hs5x/smp         # See #80949
+      - nsim/nsim_hs5x/smp/12cores # See #80949
+    integration_platforms:
+      - qemu_xtensa/dc233c      # Xtensa ISA
+    filter: not CONFIG_MPU and not CONFIG_MMU
+    extra_conf_files: ['no_mem_protection.conf', 'sys_mem_blocks.conf']
     extra_configs:
       - CONFIG_LLEXT_STORAGE_WRITABLE=y
       - CONFIG_LLEXT_TYPE_ELF_RELOCATABLE=y
