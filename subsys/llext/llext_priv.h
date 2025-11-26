@@ -32,6 +32,15 @@
 #define INSTR_FETCHABLE(base_addr, alloc) true
 #endif
 
+#ifdef CONFIG_MMU_PAGE_SIZE
+#define LLEXT_PAGE_SIZE CONFIG_MMU_PAGE_SIZE
+#elif CONFIG_ARC_MPU_VER == 2
+#define LLEXT_PAGE_SIZE 2048
+#else
+/* Arm and non-v2 ARC MPUs want a 32 byte minimum MPU region */
+#define LLEXT_PAGE_SIZE 32
+#endif
+
 /*
  * Global extension list
  */
@@ -50,6 +59,7 @@ int llext_copy_regions(struct llext_loader *ldr, struct llext *ext,
 void llext_free_regions(struct llext *ext);
 void llext_adjust_mmu_permissions(struct llext *ext);
 
+#ifdef CONFIG_LLEXT_HEAP_DYNAMIC
 #ifdef CONFIG_HARVARD
 extern struct k_heap llext_instr_heap;
 extern struct k_heap llext_data_heap;
@@ -57,6 +67,7 @@ extern struct k_heap llext_data_heap;
 extern struct k_heap llext_heap;
 #define llext_instr_heap llext_heap
 #define llext_data_heap  llext_heap
+#endif
 #endif
 
 static inline bool llext_heap_is_inited(void)
@@ -70,52 +81,19 @@ static inline bool llext_heap_is_inited(void)
 #endif
 }
 
-static inline void *llext_alloc_data(size_t bytes)
-{
-	if (!llext_heap_is_inited()) {
-		return NULL;
-	}
+void *llext_alloc_metadata(size_t bytes);
 
-	/* Used for LLEXT metadata */
-	return k_heap_alloc(&llext_data_heap, bytes, K_NO_WAIT);
-}
+void *llext_aligned_alloc_data(struct llext *ext, size_t align, size_t bytes);
 
-static inline void *llext_aligned_alloc_data(size_t align, size_t bytes)
-{
-	if (!llext_heap_is_inited()) {
-		return NULL;
-	}
+void *llext_aligned_alloc_instr(struct llext *ext, size_t align, size_t bytes);
 
-	/* Used for LLEXT metadata OR non-executable section */
-	return k_heap_aligned_alloc(&llext_data_heap, align, bytes, K_NO_WAIT);
-}
+void llext_free_metadata(void *ptr);
 
-static inline void llext_free(void *ptr)
-{
-	if (!llext_heap_is_inited()) {
-		return;
-	}
+void llext_free_data(struct llext *ext, void *ptr);
 
-	k_heap_free(&llext_data_heap, ptr);
-}
+void llext_free_instr(struct llext *ext, void *ptr);
 
-static inline void *llext_aligned_alloc_instr(size_t align, size_t bytes)
-{
-	if (!llext_heap_is_inited()) {
-		return NULL;
-	}
-
-	return k_heap_aligned_alloc(&llext_instr_heap, align, bytes, K_NO_WAIT);
-}
-
-static inline void llext_free_instr(void *ptr)
-{
-	if (!llext_heap_is_inited()) {
-		return;
-	}
-
-	k_heap_free(&llext_instr_heap, ptr);
-}
+void llext_heap_reset(struct llext *ext);
 
 /*
  * ELF parsing (llext_load.c)
