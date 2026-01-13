@@ -23,6 +23,11 @@
 #include "syscalls_ext.h"
 #include "threads_kernel_objects_ext.h"
 
+#ifdef CONFIG_LLEXT_HEAP_K_HEAP
+#include <zephyr/llext/k_heap.h>
+#elif defined(CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS)
+#include <zephyr/llext/sys_mem_blocks_heap.h>
+#endif
 
 LOG_MODULE_REGISTER(test_llext);
 
@@ -468,7 +473,6 @@ ZTEST(llext, test_inter_ext)
 	zassert_ok(ret, "dependency load should succeed");
 
 	ret = llext_load(loader_dependent, "export_dependent", &ext_dependent, &ldr_parm);
-
 	zassert_ok(ret, "dependent load should succeed");
 
 	int (*test_entry_fn)() = llext_find_sym(&ext_dependent->exp_tab, "test_entry");
