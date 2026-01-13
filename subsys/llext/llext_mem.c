@@ -10,7 +10,12 @@
 #include <zephyr/llext/llext.h>
 #include <zephyr/kernel.h>
 #include <zephyr/cache.h>
-#include <zephyr/sys/mem_blocks.h>
+
+#ifdef CONFIG_LLEXT_HEAP_K_HEAP
+#include <zephyr/llext/k_heap.h>
+#elif defined(CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS)
+#include <zephyr/llext/sys_mem_blocks_heap.h>
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
@@ -18,65 +23,6 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 #include <string.h>
 
 #include "llext_priv.h"
-
-#ifdef CONFIG_LLEXT_HEAP_K_HEAP
-#ifdef CONFIG_LLEXT_HEAP_DYNAMIC
-#ifdef CONFIG_HARVARD
-struct k_heap llext_instr_heap;
-struct k_heap llext_data_heap;
-#else
-struct k_heap llext_heap;
-#endif
-bool llext_heap_inited;
-#else
-#ifdef CONFIG_HARVARD
-Z_HEAP_DEFINE_IN_SECT(llext_instr_heap, (CONFIG_LLEXT_INSTR_HEAP_SIZE * KB(1)),
-		      __attribute__((section(".rodata.llext_instr_heap"))));
-Z_HEAP_DEFINE_IN_SECT(llext_data_heap, (CONFIG_LLEXT_DATA_HEAP_SIZE * KB(1)),
-		      __attribute__((section(".data.llext_data_heap"))));
-#else
-K_HEAP_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SIZE * KB(1));
-#endif
-#endif
-#else
-#ifdef CONFIG_HARVARD
-BUILD_ASSERT(CONFIG_LLEXT_INSTR_HEAP_SIZE * KB(1) %
-	     CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE == 0,
-	     "CONFIG_LLEXT_INSTR_HEAP_SIZE must be multiple of "
-	     "CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE");
-BUILD_ASSERT(CONFIG_LLEXT_DATA_HEAP_SIZE * KB(1) % CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE == 0,
-	     "CONFIG_LLEXT_DATA_HEAP_SIZE must be multiple of "
-	     "CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE");
-BUILD_ASSERT(CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE % LLEXT_PAGE_SIZE == 0,
-	     "CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE must be multiple of LLEXT_PAGE_SIZE");
-uint8_t llext_instr_heap_buf[CONFIG_LLEXT_INSTR_HEAP_SIZE * KB(1)]
-	__aligned(CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE)
-	__attribute__((section(".rodata.llext_instr_heap")));
-uint8_t llext_data_heap_buf[CONFIG_LLEXT_DATA_HEAP_SIZE * KB(1)]
-	__aligned(CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE)
-	__attribute__((section(".data.llext_data_heap")));
-SYS_MEM_BLOCKS_DEFINE_WITH_EXT_BUF(llext_instr_heap, CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE,
-				   CONFIG_LLEXT_INSTR_HEAP_SIZE * KB(1) /
-					   CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE,
-				   llext_instr_heap_buf);
-SYS_MEM_BLOCKS_DEFINE_WITH_EXT_BUF(llext_data_heap, CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE,
-				   CONFIG_LLEXT_DATA_HEAP_SIZE * KB(1) /
-					   CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE,
-				   llext_data_heap_buf);
-K_HEAP_DEFINE(llext_metadata_heap, CONFIG_LLEXT_METADATA_HEAP_SIZE * KB(1));
-#else
-BUILD_ASSERT(CONFIG_LLEXT_EXT_HEAP_SIZE * KB(1) % CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE == 0,
-	     "CONFIG_LLEXT_EXT_HEAP_SIZE must be multiple of "
-	     "CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE");
-BUILD_ASSERT(CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE % LLEXT_PAGE_SIZE == 0,
-	     "CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE must be multiple of LLEXT_PAGE_SIZE");
-SYS_MEM_BLOCKS_DEFINE(llext_heap, CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE,
-		      CONFIG_LLEXT_EXT_HEAP_SIZE * KB(1) /
-			      CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE,
-		      CONFIG_LLEXT_HEAP_SYS_MEM_BLOCKS_BLOCK_SIZE);
-K_HEAP_DEFINE(llext_metadata_heap, CONFIG_LLEXT_METADATA_HEAP_SIZE * KB(1));
-#endif
-#endif
 
 /*
  * Initialize the memory partition associated with the specified memory region
@@ -218,9 +164,9 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 
 	/* Allocate a suitably aligned area for the region. */
 	if (region->sh_flags & SHF_EXECINSTR) {
-		ext->mem[mem_idx] = llext_aligned_alloc_instr(ext, region_align, region_alloc);
+		ext->mem[mem_idx] = llext_heap_aligned_alloc_instr(ext, region_align, region_alloc);
 	} else {
-		ext->mem[mem_idx] = llext_aligned_alloc_data(ext, region_align, region_alloc);
+		ext->mem[mem_idx] = llext_heap_aligned_alloc_data(ext, region_align, region_alloc);
 	}
 
 	if (!ext->mem[mem_idx]) {
@@ -268,7 +214,7 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	return 0;
 
 err:
-	llext_free_metadata(ext->mem[mem_idx]);
+	llext_heap_free_metadata(ext->mem[mem_idx]);
 	ext->mem[mem_idx] = NULL;
 	return ret;
 }
@@ -373,9 +319,9 @@ void llext_free_regions(struct llext *ext)
 			LOG_DBG("freeing memory region %d", i);
 
 			if (i == LLEXT_MEM_TEXT) {
-				llext_free_instr(ext, ext->mem[i]);
+				llext_heap_free_instr(ext, ext->mem[i]);
 			} else {
-				llext_free_data(ext, ext->mem[i]);
+				llext_heap_free_data(ext, ext->mem[i]);
 			}
 
 			ext->mem[i] = NULL;
@@ -403,62 +349,6 @@ int llext_add_domain(struct llext *ext, struct k_mem_domain *domain)
 	}
 
 	return ret;
-#else
-	return -ENOSYS;
-#endif
-}
-
-int llext_heap_init_harvard(void *instr_mem, size_t instr_bytes, void *data_mem, size_t data_bytes)
-{
-#if !defined(CONFIG_LLEXT_HEAP_DYNAMIC) || !defined(CONFIG_HARVARD)
-	return -ENOSYS;
-#else
-	if (llext_heap_inited) {
-		return -EEXIST;
-	}
-
-	k_heap_init(&llext_instr_heap, instr_mem, instr_bytes);
-	k_heap_init(&llext_data_heap, data_mem, data_bytes);
-
-	llext_heap_inited = true;
-	return 0;
-#endif
-}
-
-int llext_heap_init(void *mem, size_t bytes)
-{
-#if !defined(CONFIG_LLEXT_HEAP_DYNAMIC) || defined(CONFIG_HARVARD)
-	return -ENOSYS;
-#else
-	if (llext_heap_inited) {
-		return -EEXIST;
-	}
-
-	k_heap_init(&llext_heap, mem, bytes);
-
-	llext_heap_inited = true;
-	return 0;
-#endif
-}
-
-#ifdef CONFIG_LLEXT_HEAP_DYNAMIC
-static int llext_loaded(struct llext *ext, void *arg)
-{
-	return 1;
-}
-#endif
-
-int llext_heap_uninit(void)
-{
-#ifdef CONFIG_LLEXT_HEAP_DYNAMIC
-	if (!llext_heap_inited) {
-		return -EEXIST;
-	}
-	if (llext_iterate(llext_loaded, NULL)) {
-		return -EBUSY;
-	}
-	llext_heap_inited = false;
-	return 0;
 #else
 	return -ENOSYS;
 #endif
