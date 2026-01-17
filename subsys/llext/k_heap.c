@@ -18,9 +18,9 @@ bool llext_heap_inited;
 #else
 #ifdef CONFIG_HARVARD
 Z_HEAP_DEFINE_IN_SECT(llext_instr_heap, (CONFIG_LLEXT_INSTR_HEAP_SIZE * KB(1)),
-		      __attribute__((section(".rodata.llext_instr_heap"))));
+		      __attribute__((section(CONFIG_LLEXT_INSTR_HEAP_SECTION))));
 Z_HEAP_DEFINE_IN_SECT(llext_data_heap, (CONFIG_LLEXT_DATA_HEAP_SIZE * KB(1)),
-		      __attribute__((section(".data.llext_data_heap"))));
+		      __attribute__((section(CONFIG_LLEXT_DATA_HEAP_SECTION))));
 #define llext_metadata_heap llext_data_heap
 #else
 K_HEAP_DEFINE(llext_ext_heap, CONFIG_LLEXT_HEAP_SIZE * KB(1));

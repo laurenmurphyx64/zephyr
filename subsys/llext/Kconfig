@@ -130,6 +130,20 @@ config LLEXT_DATA_HEAP_SIZE
 	help
 	  Data heap size in kilobytes available to llext.
 
+config LLEXT_INSTR_HEAP_SECTION
+	string "Section to place llext instruction heap"
+	depends on HARVARD
+	default ".rodata.llext_instr_heap"
+	help
+	  Section to place the llext instruction heap in memory.
+
+config LLEXT_DATA_HEAP_SECTION
+	string "Section to place llext data heap"
+	depends on HARVARD
+	default ".data.llext_data_heap"
+	help
+	  Section to place the llext data heap in memory.
+
 config LLEXT_BUILD_PIC
 	bool "Use -fPIC when building LLEXT"
 	depends on XTENSA
