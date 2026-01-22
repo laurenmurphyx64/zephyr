@@ -19,6 +19,7 @@ if(CONFIG_LLEXT)
   zephyr_library_sources_ifdef(CONFIG_LLEXT_SHELL shell.c)
   zephyr_library_sources_ifdef(CONFIG_LLEXT_EXPERIMENTAL llext_experimental.c)
   zephyr_library_sources_ifdef(CONFIG_LLEXT_HEAP_K_HEAP k_heap.c)
+  zephyr_library_sources_ifdef(CONFIG_LLEXT_HEAP_MEMBLK memblk_heap.c)
 
   if(CONFIG_RISCV AND CONFIG_USERSPACE)
     message(WARNING "Running LLEXT extensions from user-space threads on RISC-V is not supported!")
