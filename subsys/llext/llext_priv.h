@@ -51,6 +51,8 @@ extern struct k_mutex llext_lock;
  * Memory management (llext_mem.c)
  */
 
+void *llext_instr_memset(void *buf, int c, size_t n);
+void *llext_instr_memcpy(void *ZRESTRICT d, const void *ZRESTRICT s, size_t n);
 int llext_copy_strings(struct llext_loader *ldr, struct llext *ext,
 		       const struct llext_load_param *ldr_parm);
 int llext_copy_regions(struct llext_loader *ldr, struct llext *ext,

@@ -54,6 +54,7 @@ void llext_fs_finalize(struct llext_loader *ldr);
 			{                                                                          \
 				.prepare = llext_fs_prepare,                                       \
 				.read = llext_fs_read,                                             \
+				.read_instr = llext_fs_read,                                       \
 				.seek = llext_fs_seek,                                             \
 				.peek = NULL,                                                      \
 				.finalize = llext_fs_finalize,                                     \

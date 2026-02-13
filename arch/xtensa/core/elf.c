@@ -32,6 +32,81 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 #define R_XTENSA_ASM_EXPAND	11
 #define R_XTENSA_SLOT0_OP	20
 
+#ifdef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+/* Some forms of instruction memory, e.g. Xtensa IRAM, do not support
+ * narrow load / store.
+ */
+static void r_xtensa_slot0_op_relocate_word_size_aligned(const elf_rela_t *rel, uint8_t *loc,
+							 ssize_t value)
+{
+	/* Calculate alignment offset and load instruction using word aligned accesses */
+	uintptr_t loc_addr = (uintptr_t)loc;
+	uint32_t *loc_word = (uint32_t *)(loc_addr & ~3);
+	unsigned int byte_offset = loc_addr & 3;
+
+	/* Load the aligned word(s) containing the instruction */
+	uint32_t word0 = *loc_word;
+	uint32_t word1 = 0;
+
+	/* If instruction straddles a word boundary, load the next word too */
+	if (byte_offset + 3 > 4) {
+		word1 = *(loc_word + 1);
+	}
+
+	/* Extract the 3-byte instruction from the loaded words */
+	uint32_t instruction;
+
+	if (byte_offset == 0) {
+		instruction = word0 & 0xffffff;
+	} else if (byte_offset == 1) {
+		instruction = (word0 >> 8) & 0xffffff;
+	} else if (byte_offset == 2) {
+		instruction = ((word0 >> 16) & 0xffff) | ((word1 & 0xff) << 16);
+	} else { /* byte_offset == 3 */
+		instruction = ((word0 >> 24) & 0xff) | ((word1 & 0xffff) << 8);
+	}
+
+	/* Extract the bytes for opcode checking */
+	uint8_t byte0 = instruction & 0xff;
+	uint8_t byte1 = (instruction >> 8) & 0xff;
+	uint8_t byte2 = (instruction >> 16) & 0xff;
+
+	/* Check the locode and modify the instruction */
+	if ((byte0 & 0xf) == 1 && !byte1 && !byte2) {
+		/* L32R: low nibble is 1 */
+		instruction = (instruction & 0xff0000ff) | ((value & 0xff) << 8) |
+			      (((value >> 8) & 0xff) << 16);
+	} else if ((byte0 & 0xf) == 5 && !(byte0 & 0xc0) && !byte1 && !byte2) {
+		/* CALLn: low nibble is 5 */
+		instruction = (instruction & 0xff0000c0) | (byte0 & 0x3f) |
+			      (((value << 6) & 0xc0)) | (((value >> 2) & 0xff) << 8) |
+			      (((value >> 10) & 0xff) << 16);
+	} else {
+		LOG_DBG("%p: unhandled OPC or no relocation %02x%02x%02x inf %#x offs %#x",
+			(void *)loc, byte2, byte1, byte0, rel->r_info, rel->r_offset);
+	}
+
+	/* Write the modified instruction back using word aligned stores */
+	if (byte_offset == 0) {
+		word0 = (word0 & 0xff000000) | (instruction & 0xffffff);
+		*loc_word = word0;
+	} else if (byte_offset == 1) {
+		word0 = (word0 & 0x000000ff) | ((instruction & 0xffffff) << 8);
+		*loc_word = word0;
+	} else if (byte_offset == 2) {
+		word0 = (word0 & 0x0000ffff) | ((instruction & 0xffff) << 16);
+		word1 = (word1 & 0xffffff00) | ((instruction >> 16) & 0xff);
+		*loc_word = word0;
+		*(loc_word + 1) = word1;
+	} else { /* byte_offset == 3 */
+		word0 = (word0 & 0x00ffffff) | ((instruction & 0xff) << 24);
+		word1 = (word1 & 0xffff0000) | ((instruction >> 8) & 0xffff);
+		*loc_word = word0;
+		*(loc_word + 1) = word1;
+	}
+}
+#endif /* CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS */
+
 static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 			       const elf_rela_t *rel, uintptr_t addr,
 			       uint8_t *loc, int type, uint32_t stb,
@@ -100,6 +175,7 @@ static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 			rsym.st_value + rel->r_addend;
 		ssize_t value = (link_addr - (((uintptr_t)got_entry + 3) & ~3)) >> 2;
 
+#ifndef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
 		/* Check the opcode */
 		if ((loc[0] & 0xf) == 1 && !loc[1] && !loc[2]) {
 			/* L32R: low nibble is 1 */
@@ -116,7 +192,9 @@ static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 				rel->r_info, rel->r_offset);
 			break;
 		}
-
+#else
+		r_xtensa_slot0_op_relocate_word_size_aligned(rel, loc, value);
+#endif
 		break;
 	case R_XTENSA_ASM_EXPAND:
 		/* Nothing to do */

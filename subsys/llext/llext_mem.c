@@ -54,6 +54,159 @@ static void llext_init_mem_part(struct llext *ext, enum llext_mem mem_idx,
 	LOG_DBG("region %d: start %#zx, size %zd", mem_idx, (size_t)start, len);
 }
 
+#ifdef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+static inline void llext_copy_byte_word_aligned(unsigned char *dst, const unsigned char *src)
+{
+	/* Mask off the lower bits to get an aligned pointer */
+	const uintptr_t mask = sizeof(uintptr_t) - 1;
+	uintptr_t d_aligned = (uintptr_t)dst & ~mask;
+	uintptr_t s_aligned = (uintptr_t)src & ~mask;
+	unsigned int d_offset = (uintptr_t)dst & mask;
+	unsigned int s_offset = (uintptr_t)src & mask;
+
+	/* Read aligned words*/
+	uintptr_t d_word = *(uintptr_t *)d_aligned;
+	uintptr_t s_word = *(uintptr_t *)s_aligned;
+
+	/* Extract byte from source and insert into destination */
+	unsigned char byte_val = (s_word >> (s_offset * 8)) & 0xFF;
+	uintptr_t byte_mask = ~((uintptr_t)0xFF << (d_offset * 8));
+
+	d_word = (d_word & byte_mask) | ((uintptr_t)byte_val << (d_offset * 8));
+
+	*(uintptr_t *)d_aligned = d_word;
+}
+
+static inline void llext_set_byte_word_aligned(unsigned char *dst, unsigned char value)
+{
+	const uintptr_t mask = sizeof(uintptr_t) - 1;
+	uintptr_t d_aligned = (uintptr_t)dst & ~mask;
+	unsigned int d_offset = (uintptr_t)dst & mask;
+
+	uintptr_t d_word = *(uintptr_t *)d_aligned;
+
+	/* Clear destination byte and insert new value */
+	uintptr_t byte_mask = ~((uintptr_t)0xFF << (d_offset * 8));
+
+	d_word = (d_word & byte_mask) | ((uintptr_t)value << (d_offset * 8));
+
+	*(uintptr_t *)d_aligned = d_word;
+}
+#endif /* CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS */
+
+/*
+ * Memset for instruction region on heap. Some forms of instruction memory,
+ * e.g. Xtensa IRAM, do not support narrow load / store, necessitating
+ * a memset that only performs word-aligned and word-sized stores.
+ */
+void *llext_instr_memset(void *buf, int c, size_t n)
+{
+#ifndef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+	return memset(buf, c, n);
+#else
+	/* do byte-sized initialization until word-aligned or finished */
+	unsigned char *d_byte = (unsigned char *)buf;
+	unsigned char c_byte = (unsigned char)c;
+
+#if !defined(CONFIG_MINIMAL_LIBC_OPTIMIZE_STRING_FOR_SIZE)
+	while (((uintptr_t)d_byte) & (sizeof(uintptr_t) - 1)) {
+		if (n == 0) {
+			return buf;
+		}
+		*(d_byte++) = c_byte;
+		llext_set_byte_word_aligned(d_byte++, c_byte);
+		n--;
+	}
+
+	/* do word-sized initialization as long as possible */
+
+	uintptr_t *d_word = (uintptr_t *)d_byte;
+	uintptr_t c_word = (uintptr_t)c_byte;
+
+	c_word |= c_word << 8;
+	c_word |= c_word << 16;
+#if Z_MEM_WORD_T_WIDTH > 32
+	c_word |= c_word << 32;
+#endif
+
+	while (n >= sizeof(uintptr_t)) {
+		*(d_word++) = c_word;
+		n -= sizeof(uintptr_t);
+	}
+
+	/* do byte-sized initialization until finished */
+
+	d_byte = (unsigned char *)d_word;
+#endif
+
+	while (n > 0) {
+#if !defined(CONFIG_MINIMAL_LIBC_OPTIMIZE_STRING_FOR_SIZE)
+		llext_set_byte_word_aligned(d_byte++, c_byte);
+#else
+		*(d_byte++) = c_byte;
+#endif
+		n--;
+	}
+
+	return buf;
+#endif
+}
+
+/*
+ * Memcpy for instruction region on heap. Some forms of instruction memory,
+ * e.g. Xtensa IRAM, do not support narrow load / store, necessitating
+ * a memcpy that only performs word-aligned and word-sized loads / stores.
+ */
+void *llext_instr_memcpy(void *ZRESTRICT d, const void *ZRESTRICT s, size_t n)
+{
+#ifndef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+	return memcpy(d, s, n);
+#else
+	/* Attempt word-sized copying only if buffers have identical alignment */
+	unsigned char *d_byte = (unsigned char *)d;
+	const unsigned char *s_byte = (const unsigned char *)s;
+
+#if !defined(CONFIG_MINIMAL_LIBC_OPTIMIZE_STRING_FOR_SIZE)
+	const uintptr_t mask = sizeof(uintptr_t) - 1;
+
+	if ((((uintptr_t)d ^ (uintptr_t)s_byte) & mask) == 0) {
+		/* Deal with unaligned first bytes */
+		while (((uintptr_t)d_byte) & mask) {
+			if (n == 0) {
+				return d;
+			}
+			llext_copy_byte_word_aligned(d_byte++, s_byte++);
+			n--;
+		}
+
+		/* Do word-sized copying as long as possible */
+		uintptr_t *d_word = (uintptr_t *)d_byte;
+		const uintptr_t *s_word = (const uintptr_t *)s_byte;
+
+		while (n >= sizeof(uintptr_t)) {
+			*(d_word++) = *(s_word++);
+			n -= sizeof(uintptr_t);
+		}
+
+		d_byte = (unsigned char *)d_word;
+		s_byte = (unsigned char *)s_word;
+	}
+#endif
+
+	/* Do byte-sized copying until finished */
+	while (n > 0) {
+#if !defined(CONFIG_MINIMAL_LIBC_OPTIMIZE_STRING_FOR_SIZE)
+		llext_copy_byte_word_aligned(d_byte++, s_byte++);
+#else
+		*(d_byte++) = *(s_byte++);
+#endif
+		n--;
+	}
+
+	return d;
+#endif /* CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS */
+}
+
 static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			      enum llext_mem mem_idx, const struct llext_load_param *ldr_parm)
 {
@@ -190,7 +343,11 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			/* zero out any prepad bytes, not part of the data area */
 			size_t prepad = region->sh_info;
 
-			memset((void *)base, 0, prepad);
+			if (mem_idx == LLEXT_MEM_TEXT) {
+				llext_instr_memset((void *)base, 0, prepad);
+			} else {
+				memset((void *)base, 0, prepad);
+			}
 			base += prepad;
 			offset += prepad;
 			length -= prepad;
@@ -202,7 +359,11 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			goto err;
 		}
 
-		ret = llext_read(ldr, (void *)base, length);
+		if (mem_idx == LLEXT_MEM_TEXT) {
+			ret = llext_read_instr(ldr, (void *)base, length);
+		} else {
+			ret = llext_read(ldr, (void *)base, length);
+		}
 		if (ret != 0) {
 			goto err;
 		}

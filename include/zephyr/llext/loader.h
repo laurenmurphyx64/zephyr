@@ -102,6 +102,20 @@ struct llext_loader {
 	int (*read)(struct llext_loader *ldr, void *out, size_t len);
 
 	/**
+	 * @brief Function to read (copy) instructions from the loader
+	 *
+	 * Copies len bytes into buf from the current position of the
+	 * loader. Used to copy instructions into instruction memory.
+	 *
+	 * @param[in] ldr Loader
+	 * @param[in] out Output location
+	 * @param[in] len Length to copy into the output location
+	 *
+	 * @returns 0 on success, or a negative error code.
+	 */
+	int (*read_instr)(struct llext_loader *ldr, void *out, size_t len);
+
+	/**
 	 * @brief Function to seek to a new absolute location in the stream.
 	 *
 	 * Changes the location of the loader position to a new absolute
@@ -153,6 +167,11 @@ static inline int llext_prepare(struct llext_loader *l)
 	}
 
 	return 0;
+}
+
+static inline int llext_read_instr(struct llext_loader *l, void *buf, size_t len)
+{
+	return l->read_instr(l, buf, len);
 }
 
 static inline int llext_read(struct llext_loader *l, void *buf, size_t len)

@@ -178,6 +178,19 @@ config LLEXT_RODATA_NO_RELOC
 	  This feature requires the extension to manually tag that data with
 	  the LLEXT_RODATA_NO_RELOC macro.
 
+config LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+	bool "Require subsystem access to instructions to be word sized and aligned"
+	depends on XTENSA
+	help
+	  When enabled, the LLEXT subsystem will require load and store operations
+	  during the loading and linking of the instruction region to be word sized
+	  and aligned. Only supported by the buffer loader.
+
+	  This option is used to prevent the LLEXT subsystem from performing
+	  unsupported narrow and / or unaligned loads / stores to instruction memory.
+	  It does not prevent the extension itself from performing such accesses at
+	  runtime.
+
 config LLEXT_EXPORT_DEVICES
 	bool "Export all DT devices to llexts"
 	select LLEXT_EXPORT_SYMBOL_GROUP_DEVICE

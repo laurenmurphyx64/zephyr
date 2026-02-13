@@ -6,8 +6,23 @@
  */
 
 #include <zephyr/llext/buf_loader.h>
+#include <zephyr/llext/llext_internal.h>
 #include <zephyr/sys/util.h>
 #include <string.h>
+
+#include "llext_priv.h"
+
+int llext_buf_read_instr(struct llext_loader *l, void *buf, size_t len)
+{
+	struct llext_buf_loader *buf_l = CONTAINER_OF(l, struct llext_buf_loader, loader);
+	size_t end = MIN(buf_l->pos + len, buf_l->len);
+	size_t read_len = end - buf_l->pos;
+
+	llext_instr_memcpy(buf, buf_l->buf + buf_l->pos, read_len);
+	buf_l->pos = end;
+
+	return 0;
+}
 
 int llext_buf_read(struct llext_loader *l, void *buf, size_t len)
 {
