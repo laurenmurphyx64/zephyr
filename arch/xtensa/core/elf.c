@@ -175,7 +175,7 @@ static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 			rsym.st_value + rel->r_addend;
 		ssize_t value = (link_addr - (((uintptr_t)got_entry + 3) & ~3)) >> 2;
 
-#ifndef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+#ifdef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
 		/* Check the opcode */
 		if ((loc[0] & 0xf) == 1 && !loc[1] && !loc[2]) {
 			/* L32R: low nibble is 1 */

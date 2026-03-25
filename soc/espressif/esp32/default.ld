@@ -561,6 +561,17 @@ SECTIONS
     *(.iram.bss.*)
     _iram_bss_end = ABSOLUTE(.);
 
+  } GROUP_LINK_IN(IRAM_REGION)
+
+  .iram0.llext (NOLOAD) :
+  {
+    . = ALIGN(16);
+    _iram_llext_start = ABSOLUTE(.);
+    *(.llext_heap)
+    *(.llext_ext_heap)
+    *(.llext_instr_heap)
+    _iram_llext_end = ABSOLUTE(.);
+
     . = ALIGN(4);
     _iram_end = ABSOLUTE(.);
   } GROUP_LINK_IN(IRAM_REGION)
@@ -818,6 +829,8 @@ SECTIONS
 #else
     *(.noinit)
     *(.noinit.*)
+    *(.llext_metadata_heap)
+    *(.llext_data_heap)
 #endif /* CONFIG_ESP32_WIFI_NET_ALLOC_SPIRAM */
 #ifdef CONFIG_LLEXT
     *(.llext_heap)

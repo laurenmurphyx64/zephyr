@@ -102,6 +102,7 @@ static inline void llext_set_byte_word_aligned(unsigned char *dst, unsigned char
 void *llext_instr_memset(void *buf, int c, size_t n)
 {
 #ifndef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+	LOG_ERR("regular memset");
 	return memset(buf, c, n);
 #else
 	/* do byte-sized initialization until word-aligned or finished */
@@ -160,6 +161,7 @@ void *llext_instr_memset(void *buf, int c, size_t n)
 void *llext_instr_memcpy(void *ZRESTRICT d, const void *ZRESTRICT s, size_t n)
 {
 #ifndef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
+	LOG_ERR("regular memcpy");
 	return memcpy(d, s, n);
 #else
 	/* Attempt word-sized copying only if buffers have identical alignment */

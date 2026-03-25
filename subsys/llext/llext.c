@@ -249,11 +249,26 @@ int llext_unload(struct llext **ext)
 	return 0;
 }
 
+/* Convert DRAM address to its IRAM counterpart in SRAM1 memory */
+#define SRAM0_IRAM_START    DT_REG_ADDR(DT_NODELABEL(sram0))
+#define SRAM0_SIZE          DT_REG_SIZE(DT_NODELABEL(sram0))
+#define SRAM1_IRAM_START      (SRAM0_IRAM_START + SRAM0_SIZE)
+#define SRAM1_SIZE            DT_REG_SIZE(DT_NODELABEL(sram1))
+#define SRAM1_DRAM_START      DT_REG_ADDR(DT_NODELABEL(sram1))
+#define SRAM1_DRAM_IRAM_CALC(addr_dram) (SRAM1_SIZE - (addr_dram - SRAM1_DRAM_START) + \
+					SRAM1_IRAM_START)
+
 int llext_call_fn(struct llext *ext, const char *sym_name)
 {
 	void (*fn)(void);
 
 	fn = llext_find_sym(&ext->exp_tab, sym_name);
+
+	// uintptr_t fn_iram = SRAM1_DRAM_IRAM_CALC(((uintptr_t)fn));
+	// fn = (void (*)(void))fn_iram;
+
+	// LOG_DBG("fn_iram: %p, fn: %p", (void *)fn_iram, (void *)fn);
+
 	if (fn == NULL) {
 		return -ENOENT;
 	}

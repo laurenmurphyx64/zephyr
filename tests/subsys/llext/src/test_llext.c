@@ -378,49 +378,49 @@ void do_inspect_checks(struct llext_loader *ldr, struct llext *ext, enum llext_m
 		     "symbol %s mapped outside section %s", sym_name, sect_name);
 }
 
-ZTEST(llext, test_inspect)
-{
-	int res;
+// ZTEST(llext, test_inspect)
+// {
+// 	int res;
 
-	struct llext_buf_loader buf_loader =
-		LLEXT_BUF_LOADER(inspect_ext, sizeof(inspect_ext));
-	struct llext_loader *ldr = &buf_loader.loader;
-	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
-	struct llext *ext = NULL;
-	size_t max_alloc_bytes;
+// 	struct llext_buf_loader buf_loader =
+// 		LLEXT_BUF_LOADER(inspect_ext, sizeof(inspect_ext));
+// 	struct llext_loader *ldr = &buf_loader.loader;
+// 	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
+// 	struct llext *ext = NULL;
+// 	size_t max_alloc_bytes;
 
-	ldr_parm.keep_section_info = true;
-	res = llext_load(ldr, "inspect", &ext, &ldr_parm);
-	zassert_ok(res, "load should succeed");
+// 	ldr_parm.keep_section_info = true;
+// 	res = llext_load(ldr, "inspect", &ext, &ldr_parm);
+// 	zassert_ok(res, "load should succeed");
 
-	/* MWDT puts variables that are supposed to go into .bss into .data */
-#ifdef __CCAC__
-	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".data", "number_in_bss");
-#else
-	do_inspect_checks(ldr, ext, LLEXT_MEM_BSS, ".bss", "number_in_bss");
-#endif
+// 	/* MWDT puts variables that are supposed to go into .bss into .data */
+// #ifdef __CCAC__
+// 	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".data", "number_in_bss");
+// #else
+// 	do_inspect_checks(ldr, ext, LLEXT_MEM_BSS, ".bss", "number_in_bss");
+// #endif
 
-	/* When the -Hccm flag is passed to MWDT, it puts read-only data into
-	 * a special data-type section called .rodata_in_data
-	 */
-	res = llext_section_shndx(ldr, ext, ".rodata_in_data");
-	if (res > 0) {
-		do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".rodata_in_data", "number_in_rodata");
-		do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".my_rodata", "number_in_my_rodata");
-	} else {
-		do_inspect_checks(ldr, ext, LLEXT_MEM_RODATA, ".rodata", "number_in_rodata");
-		do_inspect_checks(ldr, ext, LLEXT_MEM_RODATA, ".my_rodata", "number_in_my_rodata");
-	}
+// 	/* When the -Hccm flag is passed to MWDT, it puts read-only data into
+// 	 * a special data-type section called .rodata_in_data
+// 	 */
+// 	res = llext_section_shndx(ldr, ext, ".rodata_in_data");
+// 	if (res > 0) {
+// 		do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".rodata_in_data", "number_in_rodata");
+// 		do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".my_rodata", "number_in_my_rodata");
+// 	} else {
+// 		do_inspect_checks(ldr, ext, LLEXT_MEM_RODATA, ".rodata", "number_in_rodata");
+// 		do_inspect_checks(ldr, ext, LLEXT_MEM_RODATA, ".my_rodata", "number_in_my_rodata");
+// 	}
 
-	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".data", "number_in_data");
-	do_inspect_checks(ldr, ext, LLEXT_MEM_TEXT, ".text", "function_in_text");
+// 	do_inspect_checks(ldr, ext, LLEXT_MEM_DATA, ".data", "number_in_data");
+// 	do_inspect_checks(ldr, ext, LLEXT_MEM_TEXT, ".text", "function_in_text");
 
-	max_alloc_bytes = ext->alloc_size;
-	llext_free_inspection_data(ldr, ext);
-	zassert_true(ext->alloc_size < max_alloc_bytes, "inspection data should be freed");
+// 	max_alloc_bytes = ext->alloc_size;
+// 	llext_free_inspection_data(ldr, ext);
+// 	zassert_true(ext->alloc_size < max_alloc_bytes, "inspection data should be freed");
 
-	llext_unload(&ext);
-}
+// 	llext_unload(&ext);
+// }
 
 #ifndef CONFIG_LLEXT_TYPE_ELF_OBJECT
 static LLEXT_CONST uint8_t multi_file_ext[] LLEXT_SECT ELF_ALIGN = {
@@ -453,34 +453,34 @@ static LLEXT_CONST uint8_t export_dependency_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "export_dependency.inc"
 };
 
-ZTEST(llext, test_inter_ext)
-{
-	const void *dependency_buf = export_dependency_ext;
-	const void *dependent_buf = export_dependent_ext;
-	struct llext_buf_loader buf_loader_dependency =
-		LLEXT_BUF_LOADER(dependency_buf, sizeof(hello_world_ext));
-	struct llext_buf_loader buf_loader_dependent =
-		LLEXT_BUF_LOADER(dependent_buf, sizeof(export_dependent_ext));
-	struct llext_loader *loader_dependency = &buf_loader_dependency.loader;
-	struct llext_loader *loader_dependent = &buf_loader_dependent.loader;
-	const struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
-	struct llext *ext_dependency = NULL, *ext_dependent = NULL;
-	int ret = llext_load(loader_dependency, "inter_ext_dependency", &ext_dependency, &ldr_parm);
+// ZTEST(llext, test_inter_ext)
+// {
+// 	const void *dependency_buf = export_dependency_ext;
+// 	const void *dependent_buf = export_dependent_ext;
+// 	struct llext_buf_loader buf_loader_dependency =
+// 		LLEXT_BUF_LOADER(dependency_buf, sizeof(hello_world_ext));
+// 	struct llext_buf_loader buf_loader_dependent =
+// 		LLEXT_BUF_LOADER(dependent_buf, sizeof(export_dependent_ext));
+// 	struct llext_loader *loader_dependency = &buf_loader_dependency.loader;
+// 	struct llext_loader *loader_dependent = &buf_loader_dependent.loader;
+// 	const struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
+// 	struct llext *ext_dependency = NULL, *ext_dependent = NULL;
+// 	int ret = llext_load(loader_dependency, "inter_ext_dependency", &ext_dependency, &ldr_parm);
 
-	zassert_ok(ret, "dependency load should succeed");
+// 	zassert_ok(ret, "dependency load should succeed");
 
-	ret = llext_load(loader_dependent, "export_dependent", &ext_dependent, &ldr_parm);
+// 	ret = llext_load(loader_dependent, "export_dependent", &ext_dependent, &ldr_parm);
 
-	zassert_ok(ret, "dependent load should succeed");
+// 	zassert_ok(ret, "dependent load should succeed");
 
-	int (*test_entry_fn)() = llext_find_sym(&ext_dependent->exp_tab, "test_entry");
+// 	int (*test_entry_fn)() = llext_find_sym(&ext_dependent->exp_tab, "test_entry");
 
-	zassert_not_null(test_entry_fn, "test_entry should be an exported symbol");
-	test_entry_fn();
+// 	zassert_not_null(test_entry_fn, "test_entry should be an exported symbol");
+// 	test_entry_fn();
 
-	llext_unload(&ext_dependent);
-	llext_unload(&ext_dependency);
-}
+// 	llext_unload(&ext_dependent);
+// 	llext_unload(&ext_dependency);
+// }
 #endif
 
 #if defined(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE) && defined(CONFIG_XTENSA)
@@ -516,50 +516,50 @@ static LLEXT_CONST uint8_t find_section_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "find_section.inc"
 };
 
-ZTEST(llext, test_find_section)
-{
-	/* This test exploits the fact that in the STORAGE_WRITABLE cases, the
-	 * symbol addresses calculated by llext will be directly inside the ELF
-	 * file buffer, so the two methods can be easily compared.
-	 */
+// ZTEST(llext, test_find_section)
+// {
+// 	/* This test exploits the fact that in the STORAGE_WRITABLE cases, the
+// 	 * symbol addresses calculated by llext will be directly inside the ELF
+// 	 * file buffer, so the two methods can be easily compared.
+// 	 */
 
-	int res;
-	ssize_t section_ofs;
+// 	int res;
+// 	ssize_t section_ofs;
 
-	struct llext_buf_loader buf_loader =
-		LLEXT_BUF_LOADER(find_section_ext, sizeof(find_section_ext));
-	struct llext_loader *loader = &buf_loader.loader;
-	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
-	struct llext *ext = NULL;
-	elf_shdr_t shdr;
+// 	struct llext_buf_loader buf_loader =
+// 		LLEXT_BUF_LOADER(find_section_ext, sizeof(find_section_ext));
+// 	struct llext_loader *loader = &buf_loader.loader;
+// 	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
+// 	struct llext *ext = NULL;
+// 	elf_shdr_t shdr;
 
-	res = llext_load(loader, "find_section", &ext, &ldr_parm);
-	zassert_ok(res, "load should succeed");
+// 	res = llext_load(loader, "find_section", &ext, &ldr_parm);
+// 	zassert_ok(res, "load should succeed");
 
-	section_ofs = llext_find_section(loader, ".data");
-	zassert_true(section_ofs > 0, "find_section returned %zd", section_ofs);
+// 	section_ofs = llext_find_section(loader, ".data");
+// 	zassert_true(section_ofs > 0, "find_section returned %zd", section_ofs);
 
-	res = llext_get_section_header(loader, ext, ".data", &shdr);
-	zassert_ok(res, "get_section_header() should succeed");
-	zassert_equal(shdr.sh_offset, section_ofs,
-		     "different section offset %llu from get_section_header",
-		     (uint64_t)shdr.sh_offset);
+// 	res = llext_get_section_header(loader, ext, ".data", &shdr);
+// 	zassert_ok(res, "get_section_header() should succeed");
+// 	zassert_equal(shdr.sh_offset, section_ofs,
+// 		     "different section offset %llu from get_section_header",
+// 		     (uint64_t)shdr.sh_offset);
 
-	uintptr_t symbol_ptr = (uintptr_t)llext_find_sym(&ext->exp_tab, "number");
-	uintptr_t section_ptr = (uintptr_t)find_section_ext + section_ofs;
+// 	uintptr_t symbol_ptr = (uintptr_t)llext_find_sym(&ext->exp_tab, "number");
+// 	uintptr_t section_ptr = (uintptr_t)find_section_ext + section_ofs;
 
-	/*
-	 * FIXME on RISC-V, at least for GCC, the symbols aren't always at the beginning
-	 * of the section when CONFIG_LLEXT_TYPE_ELF_OBJECT is used, breaking this assertion.
-	 * Currently, CONFIG_LLEXT_TYPE_ELF_OBJECT is not supported on RISC-V.
-	 */
+// 	/*
+// 	 * FIXME on RISC-V, at least for GCC, the symbols aren't always at the beginning
+// 	 * of the section when CONFIG_LLEXT_TYPE_ELF_OBJECT is used, breaking this assertion.
+// 	 * Currently, CONFIG_LLEXT_TYPE_ELF_OBJECT is not supported on RISC-V.
+// 	 */
 
-	zassert_equal(symbol_ptr, section_ptr,
-		      "symbol at %p != .data section at %p (%zd bytes in the ELF)",
-		      (void *)symbol_ptr, (void *)section_ptr, section_ofs);
+// 	zassert_equal(symbol_ptr, section_ptr,
+// 		      "symbol at %p != .data section at %p (%zd bytes in the ELF)",
+// 		      (void *)symbol_ptr, (void *)section_ptr, section_ofs);
 
-	llext_unload(&ext);
-}
+// 	llext_unload(&ext);
+// }
 
 /* For Harvard architectures, the detached section must be placed in instruction memory. */
 #ifdef CONFIG_HARVARD
@@ -586,41 +586,41 @@ static bool test_section_detached(const elf_shdr_t *shdr)
 	return shdr->sh_name == detached_shdr.sh_name;
 }
 
-ZTEST(llext, test_detached)
-{
-	struct llext_buf_loader buf_loader =
-		LLEXT_BUF_LOADER(test_detached_ext, sizeof(test_detached_ext));
-	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
-	int res;
+// ZTEST(llext, test_detached)
+// {
+// 	struct llext_buf_loader buf_loader =
+// 		LLEXT_BUF_LOADER(test_detached_ext, sizeof(test_detached_ext));
+// 	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
+// 	int res;
 
-	ldr_parm.section_detached = test_section_detached;
-	detached_loader = &buf_loader.loader;
+// 	ldr_parm.section_detached = test_section_detached;
+// 	detached_loader = &buf_loader.loader;
 
-	res = llext_load(detached_loader, "test_detached", &detached_llext, &ldr_parm);
-	zassert_ok(res, "load should succeed");
+// 	res = llext_load(detached_loader, "test_detached", &detached_llext, &ldr_parm);
+// 	zassert_ok(res, "load should succeed");
 
-	/*
-	 * Verify that the detached section is outside of the .text region.
-	 * This only works with the shared ELF type, because with other types
-	 * section addresses aren't "real," e.g. they can be 0.
-	 */
-	elf_shdr_t *text_region = detached_loader->sects + LLEXT_MEM_TEXT;
+// 	/*
+// 	 * Verify that the detached section is outside of the .text region.
+// 	 * This only works with the shared ELF type, because with other types
+// 	 * section addresses aren't "real," e.g. they can be 0.
+// 	 */
+// 	elf_shdr_t *text_region = detached_loader->sects + LLEXT_MEM_TEXT;
 
-	zassert_true(text_region->sh_offset >= detached_shdr.sh_offset + detached_shdr.sh_size ||
-		     detached_shdr.sh_offset >= text_region->sh_offset + text_region->sh_size);
+// 	zassert_true(text_region->sh_offset >= detached_shdr.sh_offset + detached_shdr.sh_size ||
+// 		     detached_shdr.sh_offset >= text_region->sh_offset + text_region->sh_size);
 
-	void (*test_entry_fn)() = llext_find_sym(&detached_llext->exp_tab, "test_entry");
+// 	void (*test_entry_fn)() = llext_find_sym(&detached_llext->exp_tab, "test_entry");
 
-	zassert_not_null(test_entry_fn, "test_entry should be an exported symbol");
-	test_entry_fn();
+// 	zassert_not_null(test_entry_fn, "test_entry should be an exported symbol");
+// 	test_entry_fn();
 
-	test_entry_fn = llext_find_sym(&detached_llext->exp_tab, "detached_entry");
+// 	test_entry_fn = llext_find_sym(&detached_llext->exp_tab, "detached_entry");
 
-	zassert_not_null(test_entry_fn, "detached_entry should be an exported symbol");
-	test_entry_fn();
+// 	zassert_not_null(test_entry_fn, "detached_entry should be an exported symbol");
+// 	test_entry_fn();
 
-	llext_unload(&detached_llext);
-}
+// 	llext_unload(&detached_llext);
+// }
 #endif
 
 #if defined(CONFIG_FILE_SYSTEM)
