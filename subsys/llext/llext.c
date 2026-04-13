@@ -249,25 +249,11 @@ int llext_unload(struct llext **ext)
 	return 0;
 }
 
-/* Convert DRAM address to its IRAM counterpart in SRAM1 memory */
-#define SRAM0_IRAM_START    DT_REG_ADDR(DT_NODELABEL(sram0))
-#define SRAM0_SIZE          DT_REG_SIZE(DT_NODELABEL(sram0))
-#define SRAM1_IRAM_START      (SRAM0_IRAM_START + SRAM0_SIZE)
-#define SRAM1_SIZE            DT_REG_SIZE(DT_NODELABEL(sram1))
-#define SRAM1_DRAM_START      DT_REG_ADDR(DT_NODELABEL(sram1))
-#define SRAM1_DRAM_IRAM_CALC(addr_dram) (SRAM1_SIZE - (addr_dram - SRAM1_DRAM_START) + \
-					SRAM1_IRAM_START)
-
 int llext_call_fn(struct llext *ext, const char *sym_name)
 {
 	void (*fn)(void);
 
 	fn = llext_find_sym(&ext->exp_tab, sym_name);
-
-	// uintptr_t fn_iram = SRAM1_DRAM_IRAM_CALC(((uintptr_t)fn));
-	// fn = (void (*)(void))fn_iram;
-
-	// LOG_DBG("fn_iram: %p, fn: %p", (void *)fn_iram, (void *)fn);
 
 	if (fn == NULL) {
 		return -ENOENT;
@@ -317,6 +303,15 @@ inline int llext_teardown(struct llext *ext)
 	return call_fn_table(ext, false);
 }
 
+/* Convert DRAM address to its IRAM counterpart in SRAM1 memory */
+#define SRAM0_IRAM_START    DT_REG_ADDR(DT_NODELABEL(sram0))
+#define SRAM0_SIZE          DT_REG_SIZE(DT_NODELABEL(sram0))
+#define SRAM1_IRAM_START      (SRAM0_IRAM_START + SRAM0_SIZE)
+#define SRAM1_SIZE            DT_REG_SIZE(DT_NODELABEL(sram1))
+#define SRAM1_DRAM_START      DT_REG_ADDR(DT_NODELABEL(sram1))
+#define SRAM1_DRAM_IRAM_CALC(addr_dram) (SRAM1_SIZE - (addr_dram - SRAM1_DRAM_START) + \
+					SRAM1_IRAM_START)
+
 void llext_bootstrap(struct llext *ext, llext_entry_fn_t entry_fn, void *user_data)
 {
 	int ret;
@@ -330,6 +325,13 @@ void llext_bootstrap(struct llext *ext, llext_entry_fn_t entry_fn, void *user_da
 
 	/* Start extension main function */
 	LOG_DBG("calling entry function %p(%p)", (void *)entry_fn, user_data);
+	
+	uintptr_t entry_fn_iram = SRAM1_DRAM_IRAM_CALC(((uintptr_t)entry_fn));
+
+	LOG_DBG("entry_fn_iram: %p, entry_fn: %p", (void *)entry_fn_iram, (void *)entry_fn);
+
+	entry_fn = (llext_entry_fn_t)entry_fn_iram;
+
 	entry_fn(user_data);
 
 	/* Call de-initialization functions */

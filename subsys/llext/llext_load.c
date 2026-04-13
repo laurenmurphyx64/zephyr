@@ -665,11 +665,14 @@ static int llext_export_symbols(struct llext_loader *ldr, struct llext *ext,
 			}
 		}
 		if (!name) {
+			LOG_DBG("!name");
 			name = sym->name;
 		}
 
 		exp_tab->syms[i].name = name;
 		exp_tab->syms[i].addr = sym->addr;
+		LOG_DBG("&sym->addr: %p", &sym->addr);
+		LOG_DBG("&sym->name: %p", &sym->name);
 		LOG_DBG("sym %p name %s", sym->addr, sym->name);
 	}
 

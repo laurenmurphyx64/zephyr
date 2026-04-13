@@ -16,7 +16,7 @@ config MAIN_STACK_SIZE
 	default 2048
 
 config HARVARD
-	default y
+	default n
 
 if SMP
 

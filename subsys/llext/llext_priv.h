@@ -36,8 +36,8 @@
 #elif CONFIG_HARVARD && !CONFIG_ARC
 /* Unknown if section / region is in instruction memory; warn or compensate */
 #define INSTR_FETCHABLE(base_addr, alloc) false
-#elif CONFIG_XTENSA
-#define INSTR_FETCHABLE(base_addr, alloc) false
+// #elif CONFIG_XTENSA
+// #define INSTR_FETCHABLE(base_addr, alloc) false
 #else /* all non-Harvard architectures */
 #define INSTR_FETCHABLE(base_addr, alloc) true
 #endif
