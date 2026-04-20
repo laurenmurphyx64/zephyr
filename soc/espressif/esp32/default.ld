@@ -568,6 +568,9 @@ SECTIONS
     . = ALIGN(16);
     _iram_llext_start = ABSOLUTE(.);
     *(.rodata.align_ext)
+    *(.llext_heap)
+    *(.llext_ext_heap)
+    *(.llext_instr_heap)
     _iram_llext_end = ABSOLUTE(.);
 
     . = ALIGN(4);
@@ -827,8 +830,8 @@ SECTIONS
 #else
     *(.noinit)
     *(.noinit.*)
-        *(.llext_heap)
-    *(.llext_ext_heap)
+/*  *(.llext_heap)
+    *(.llext_ext_heap) */
     *(.llext_metadata_heap)
 #endif /* CONFIG_ESP32_WIFI_NET_ALLOC_SPIRAM */
 #ifdef CONFIG_LLEXT

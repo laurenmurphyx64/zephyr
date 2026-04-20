@@ -176,21 +176,13 @@ static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 		ssize_t value = (link_addr - (((uintptr_t)got_entry + 3) & ~3)) >> 2;
 
 		LOG_DBG("Hello?");
-#ifdef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
-		LOG_DBG("Hello x2?");
+#ifndef CONFIG_LLEXT_INSTR_WORD_SIZED_ALIGNED_ACCESS
 		/* Check the opcode */
-		// int check = 0;
 		if ((loc[0] & 0xf) == 1 && !loc[1] && !loc[2]) {
-			/* L32R: low nibble is 1 */
-			// check = (value & 0xff) | (((value >> 8) & 0xff) << 8);
-			// LOG_DBG("Check assembled: %#x", check);
 			loc[1] = value & 0xff;
 			loc[2] = (value >> 8) & 0xff;
 		} else if ((loc[0] & 0xf) == 5 && !(loc[0] & 0xc0) && !loc[1] && !loc[2]) {
 			/* CALLn: low nibble is 5 */
-			// check = (loc[0] & 0x3f) | (((value << 6) & 0xc0)) | (((value >> 2) & 0xff) << 8) |
-			// 	(((value >> 10) & 0xff) << 16);
-			LOG_DBG("Check assembled: %#x", check);
 			loc[0] = (loc[0] & 0x3f) | ((value << 6) & 0xc0);
 			loc[1] = (value >> 2) & 0xff;
 			loc[2] = (value >> 10) & 0xff;
