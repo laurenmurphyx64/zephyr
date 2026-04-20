@@ -1,0 +1,5 @@
+tests:
+  arch.xtensa.load_store_emulation:
+    arch_allow: xtensa
+    tags:
+      - kernel
