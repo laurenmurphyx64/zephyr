@@ -184,6 +184,25 @@ config LLEXT_RODATA_NO_RELOC
 	  This feature requires the extension to manually tag that data with
 	  the LLEXT_RODATA_NO_RELOC macro.
 
+config LLEXT_ELF_IN_WORD_GRANULAR_MEMORY
+	bool "ELF buffer placed in word granular memory"
+	depends on XTENSA && COMPILER_CODEGEN_VLIW_DISABLED
+	select WORD_GRANULAR_ACCESS
+	help
+	  Select if ELF buffer has been placed in word granular memory. When
+	  this option is enabled, the LLEXT subsystem will require load and store
+	  operations during loading and linking against the ELF buffer in
+	  word granular memory to be word sized and aligned. LLEXT will also copy
+	  the string tables and rodata onto the heap to facilitate the use of
+	  strings. The heap must not be placed in word granular memory.
+	  Only supported by the buffer loader.
+
+	  Users may copy their ELF buffers into word granular memory using
+	  :c:func:`memset_word_granular` and :c:func:`memcpy_word_granular`.
+
+	  This option does not prevent the extension itself from performing
+	  unsupported accesses at runtime.
+
 config LLEXT_EXPORT_DEVICES
 	bool "Export all DT devices to llexts"
 	select LLEXT_EXPORT_SYMBOL_GROUP_DEVICE

@@ -6183,6 +6183,21 @@ function(add_llext_target target_name)
     set(gnu_strip_for_mwdt_cmd ${CMAKE_COMMAND} -E true)
   endif()
 
+  if(CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_MEMORY)
+    set(pad_to_word_boundary_script ${PROJECT_BINARY_DIR}/llext/${target_name}_pad_to_word_boundary.py)
+    string(CONCAT pad_to_word_boundary_script_content
+      "import os\n"
+      "path = r'${llext_pkg_output}'\n"
+      "padding = (-os.path.getsize(path)) & 3\n"
+      "with open(path, 'ab') as file_handle:\n"
+      "    file_handle.write(b'\\x00' * padding)\n"
+    )
+    file(GENERATE OUTPUT "${pad_to_word_boundary_script}" CONTENT "${pad_to_word_boundary_script_content}")
+    set(pad_to_word_boundary_cmd ${PYTHON_EXECUTABLE} ${pad_to_word_boundary_script})
+  else()
+    set(pad_to_word_boundary_cmd ${CMAKE_COMMAND} -E true)
+  endif()
+
   # Remove sections that are unused by the llext loader
   add_custom_command(
     OUTPUT ${llext_pkg_output}
@@ -6196,6 +6211,7 @@ function(add_llext_target target_name)
             $<TARGET_PROPERTY:bintools,elfconvert_flag_outfile>${llext_pkg_output}
             $<TARGET_PROPERTY:bintools,elfconvert_flag_final>
     COMMAND ${slid_inject_cmd}
+    COMMAND ${pad_to_word_boundary_cmd}
     DEPENDS ${llext_pkg_input}
     COMMAND_EXPAND_LISTS
   )

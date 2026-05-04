@@ -116,6 +116,10 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			if (ext->mem[mem_idx]) {
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 				     ldr_parm->pre_located) &&
+#ifdef CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_MEMORY
+				    (mem_idx != LLEXT_MEM_STRTAB && mem_idx != LLEXT_MEM_SHSTRTAB &&
+				     mem_idx != LLEXT_MEM_RODATA) &&
+#endif
 				    ((mem_idx != LLEXT_MEM_TEXT) ||
 				     INSTR_FETCHABLE(ext->mem[mem_idx], region_alloc))) {
 					/* Map this region directly to the ELF buffer */
