@@ -220,3 +220,13 @@ tests:
     extra_conf_files: ['no_mem_protection.conf']
     extra_configs:
       - CONFIG_LLEXT_HEAP_DYNAMIC=y
+
+  # Test support for constrained access to ELF buffers in instruction memory
+  llext.elf_in_word_granular_memory:
+    filter: CONFIG_SOC_ESP32
+    extra_conf_files: ['no_mem_protection.conf']
+    extra_configs:
+      - CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_MEMORY=y
+      - CONFIG_COMPILER_CODEGEN_VLIW_DISABLED=y
+      - CONFIG_LLEXT_STORAGE_WRITABLE=y # Xtensa needs writable storage
+      - CONFIG_LLEXT_TYPE_ELF_RELOCATABLE=y # Test R_XTENSA_SLOT0_OP
