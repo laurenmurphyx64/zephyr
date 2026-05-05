@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/ztest.h>
+#include <zephyr/arch/common/instr_mem.h>
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/fs/fs.h>
@@ -51,6 +52,11 @@ LOG_MODULE_REGISTER(test_llext);
 #else
 #define LLEXT_FIND_BUILTIN_SYM(symbol_name) llext_find_sym(NULL, # symbol_name)
 #endif
+
+#ifdef CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM
+uint8_t instr_mem_buf[12288] __aligned(4)
+__attribute__((section(CONFIG_LLEXT_TEST_INSTR_MEM_SECTION), used));
+#endif /* CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM */
 
 struct llext_test {
 	const char *name;
@@ -247,16 +253,24 @@ void load_call_unload(const struct llext_test *test_case)
  * unloading each extension which may itself excercise various APIs provided by
  * Zephyr.
  */
-#define LLEXT_LOAD_UNLOAD(_name, extra_args...)			\
-	ZTEST(llext, test_load_unload_##_name)			\
-	{							\
-		const struct llext_test test_case = {		\
-			.name = STRINGIFY(_name),		\
-			.buf = _name ## _ext,			\
-			.buf_len = sizeof(_name ## _ext),	\
-			extra_args                              \
-		};						\
-		load_call_unload(&test_case);			\
+#ifdef CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM
+#define TEST_BUF(_name)         instr_mem_buf
+#define PREPARE_TEST_BUF(_name) arch_memcpy_d2i(instr_mem_buf, _name##_ext, sizeof(_name##_ext))
+#else
+#define TEST_BUF(_name) _name##_ext
+#define PREPARE_TEST_BUF(_name)                                                                    \
+	do {                                                                                       \
+	} while (0)
+#endif
+
+#define LLEXT_LOAD_UNLOAD(_name, extra_args...)                                                    \
+	ZTEST(llext, test_load_unload_##_name)                                                     \
+	{                                                                                          \
+		const struct llext_test test_case = {                                              \
+			.name = STRINGIFY(_name), .buf = TEST_BUF(_name),                          \
+					  .buf_len = sizeof(_name##_ext), extra_args};             \
+		PREPARE_TEST_BUF(_name);                                                           \
+		load_call_unload(&test_case);                                                      \
 	}
 
 /*
@@ -462,10 +476,18 @@ static LLEXT_CONST uint8_t export_dependency_ext[] LLEXT_SECT ELF_ALIGN = {
 
 ZTEST(llext, test_inter_ext)
 {
+#ifndef CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM
 	const void *dependency_buf = export_dependency_ext;
 	const void *dependent_buf = export_dependent_ext;
+#else
+	void *dependency_buf = instr_mem_buf;
+	void *dependent_buf = instr_mem_buf + sizeof(export_dependency_ext);
+
+	arch_memcpy_d2i(dependency_buf, export_dependency_ext, sizeof(export_dependency_ext));
+	arch_memcpy_d2i(dependent_buf, export_dependent_ext, sizeof(export_dependent_ext));
+#endif
 	struct llext_buf_loader buf_loader_dependency =
-		LLEXT_BUF_LOADER(dependency_buf, sizeof(hello_world_ext));
+		LLEXT_BUF_LOADER(dependency_buf, sizeof(export_dependency_ext));
 	struct llext_buf_loader buf_loader_dependent =
 		LLEXT_BUF_LOADER(dependent_buf, sizeof(export_dependent_ext));
 	struct llext_loader *loader_dependency = &buf_loader_dependency.loader;
@@ -490,7 +512,8 @@ ZTEST(llext, test_inter_ext)
 }
 #endif
 
-#if defined(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE) && defined(CONFIG_XTENSA)
+#if defined(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE) && defined(CONFIG_XTENSA) &&                        \
+	!defined(CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM)
 static LLEXT_CONST uint8_t pre_located_ext[] LLEXT_SECT ELF_ALIGN = {
 	#include "pre_located.inc"
 };
@@ -595,8 +618,13 @@ static bool test_section_detached(const elf_shdr_t *shdr)
 
 ZTEST(llext, test_detached)
 {
+	const void *detached_buf = test_detached_ext;
+#ifdef CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM
+	arch_memcpy_d2i(instr_mem_buf, test_detached_ext, sizeof(test_detached_ext));
+	detached_buf = instr_mem_buf;
+#endif
 	struct llext_buf_loader buf_loader =
-		LLEXT_BUF_LOADER(test_detached_ext, sizeof(test_detached_ext));
+		LLEXT_BUF_LOADER(detached_buf, sizeof(test_detached_ext));
 	struct llext_load_param ldr_parm = LLEXT_LOAD_PARAM_DEFAULT;
 	int res;
 

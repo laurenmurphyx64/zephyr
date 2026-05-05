@@ -12,3 +12,12 @@ config LLEXT_INC_IN_TEXT
 	  in .text instead of .data by default. This is useful for when the
 	  memory region the linker places .data in by default is not suitable
 	  for execution.
+
+config LLEXT_TEST_INSTR_MEM_SECTION
+	string "Section name for the test's instruction memory buffer"
+	default ".iram.data"
+	depends on LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM
+	help
+	  The section name to place the test's instruction memory buffer.
+	  This section should be placed in word-granular instruction
+	  memory by the linker script.
