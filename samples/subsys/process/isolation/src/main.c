@@ -73,33 +73,49 @@ int main(void)
 	opts_a.arg = &out_q;
 	opts_b.arg = &out_q;
 
-	/*
-	 * Grant both upcoming threads access to the message queue kernel
-	 * object *before* spawning them, so user-mode threads can call
-	 * k_msgq_put().
-	 */
-#ifdef CONFIG_USERSPACE
-	k_object_access_grant(&out_q, &proc_a.thread);
-	k_object_access_grant(&out_q, &proc_b.thread);
-#endif
-
 	int ret;
 
-	ret = z_process_spawn(&proc_a, "proc_a",
-			      proc_a_elf, sizeof(proc_a_elf),
-			      stack_a, sizeof(stack_a), &opts_a);
+	/*
+	 * Load each process (creates the thread suspended) so we can grant
+	 * the message-queue kernel object to each thread *before* it starts
+	 * running.  Then start them.
+	 */
+	ret = z_process_load(&proc_a, "proc_a",
+			     proc_a_elf, sizeof(proc_a_elf),
+			     stack_a, sizeof(stack_a), &opts_a);
 	if (ret != 0) {
-		LOG_ERR("Failed to spawn proc_a: %d", ret);
+		LOG_ERR("Failed to load proc_a: %d", ret);
 		return ret;
 	}
 
-	ret = z_process_spawn(&proc_b, "proc_b",
-			      proc_b_elf, sizeof(proc_b_elf),
-			      stack_b, sizeof(stack_b), &opts_b);
+	ret = z_process_load(&proc_b, "proc_b",
+			     proc_b_elf, sizeof(proc_b_elf),
+			     stack_b, sizeof(stack_b), &opts_b);
 	if (ret != 0) {
-		LOG_ERR("Failed to spawn proc_b: %d", ret);
+		LOG_ERR("Failed to load proc_b: %d", ret);
+		z_process_unload(&proc_a);
+		return ret;
+	}
+
+#ifdef CONFIG_USERSPACE
+	k_object_access_grant(&out_q, z_process_thread_get(&proc_a, 0));
+	k_object_access_grant(&out_q, z_process_thread_get(&proc_b, 0));
+#endif
+
+	ret = z_process_start(&proc_a);
+	if (ret != 0) {
+		LOG_ERR("Failed to start proc_a: %d", ret);
+		z_process_unload(&proc_a);
+		z_process_unload(&proc_b);
+		return ret;
+	}
+
+	ret = z_process_start(&proc_b);
+	if (ret != 0) {
+		LOG_ERR("Failed to start proc_b: %d", ret);
 		z_process_kill(&proc_a);
 		z_process_unload(&proc_a);
+		z_process_unload(&proc_b);
 		return ret;
 	}
 

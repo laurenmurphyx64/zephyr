@@ -26,6 +26,10 @@
 #include <zephyr/ztest.h>
 #include <stdint.h>
 
+#ifdef CONFIG_USERSPACE
+#include <zephyr/app_memory/app_memdomain.h>
+#endif
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Embedded extension binaries (generated at build time)
  * ─────────────────────────────────────────────────────────────────────── */
@@ -233,21 +237,23 @@ ZTEST(process_lifecycle, test_concurrent_processes)
 
 	opts.arg = &counter_sem;
 
+	/* Load (don't start) so we can grant kernel-object access first */
+	zassert_ok(z_process_load(&proc0, "ctr0",
+				  counter_elf, sizeof(counter_elf),
+				  test_stack_1, sizeof(test_stack_1),
+				  &opts));
+	zassert_ok(z_process_load(&proc1, "ctr1",
+				  counter_elf, sizeof(counter_elf),
+				  test_stack_2, sizeof(test_stack_2),
+				  &opts));
+
 #ifdef CONFIG_USERSPACE
-	/* Grant both threads access to the semaphore kernel object */
-	k_object_access_grant(&counter_sem, &proc0.thread);
-	k_object_access_grant(&counter_sem, &proc1.thread);
+	k_object_access_grant(&counter_sem, z_process_thread_get(&proc0, 0));
+	k_object_access_grant(&counter_sem, z_process_thread_get(&proc1, 0));
 #endif
 
-	zassert_ok(z_process_spawn(&proc0, "ctr0",
-				   counter_elf, sizeof(counter_elf),
-				   test_stack_1, sizeof(test_stack_1),
-				   &opts));
-
-	zassert_ok(z_process_spawn(&proc1, "ctr1",
-				   counter_elf, sizeof(counter_elf),
-				   test_stack_2, sizeof(test_stack_2),
-				   &opts));
+	zassert_ok(z_process_start(&proc0));
+	zassert_ok(z_process_start(&proc1));
 
 	zassert_ok(z_process_join(&proc0, K_SECONDS(5)));
 	zassert_ok(z_process_join(&proc1, K_SECONDS(5)));
@@ -336,6 +342,247 @@ ZTEST(process_lifecycle, test_missing_entry_sym)
 	zassert_equal(z_process_get_state(&proc), Z_PROCESS_STATE_UNLOADED,
 		      "state should be UNLOADED after failed load");
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Native (non-LLEXT) process tests
+ * ─────────────────────────────────────────────────────────────────────── */
+
+/* Shared counters between native threads of one process */
+static atomic_t native_counter_a;
+static atomic_t native_counter_b;
+static struct k_sem native_done_sem;
+
+static void native_worker_a(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	for (int i = 0; i < 5; i++) {
+		atomic_inc(&native_counter_a);
+		k_msleep(5);
+	}
+	k_sem_give(&native_done_sem);
+}
+
+static void native_worker_b(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	atomic_t *peer = (atomic_t *)p1;
+
+	for (int i = 0; i < 5; i++) {
+		atomic_inc(&native_counter_b);
+		/* Demonstrate access to peer thread's data via shared pointer */
+		atomic_add(&native_counter_b, atomic_get(peer) > 0 ? 0 : 0);
+		k_msleep(5);
+	}
+	k_sem_give(&native_done_sem);
+}
+
+/**
+ * @brief A native process with two threads runs and joins cleanly.
+ */
+ZTEST(process_lifecycle, test_native_multi_thread)
+{
+	struct z_process proc;
+
+	atomic_clear(&native_counter_a);
+	atomic_clear(&native_counter_b);
+	k_sem_init(&native_done_sem, 0, 2);
+
+	zassert_ok(z_process_init(&proc, "native_mt", NULL),
+		   "z_process_init failed");
+	zassert_equal(z_process_get_state(&proc), Z_PROCESS_STATE_LOADED);
+
+	zassert_ok(z_process_add_thread(&proc, test_stack_0,
+					sizeof(test_stack_0),
+					native_worker_a, NULL, "wa"),
+		   "add_thread A failed");
+
+	zassert_ok(z_process_add_thread(&proc, test_stack_1,
+					sizeof(test_stack_1),
+					native_worker_b,
+					(void *)&native_counter_a, "wb"),
+		   "add_thread B failed");
+
+	zassert_equal(z_process_thread_count(&proc), 2,
+		      "expected 2 threads, got %u",
+		      z_process_thread_count(&proc));
+
+	zassert_ok(z_process_start(&proc));
+	zassert_equal(z_process_get_state(&proc), Z_PROCESS_STATE_RUNNING);
+
+	/* z_process_join must wait for BOTH threads */
+	zassert_ok(z_process_join(&proc, K_SECONDS(5)),
+		   "z_process_join did not return 0");
+	zassert_equal(z_process_get_state(&proc), Z_PROCESS_STATE_DEAD);
+
+	zassert_equal(atomic_get(&native_counter_a), 5);
+	zassert_equal(atomic_get(&native_counter_b), 5);
+
+	z_process_unload(&proc);
+	zassert_equal(z_process_get_state(&proc), Z_PROCESS_STATE_UNLOADED);
+}
+
+/**
+ * @brief z_process_kill terminates every running thread of the process.
+ */
+static void native_spinner(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	while (true) {
+		k_msleep(50);
+	}
+}
+
+ZTEST(process_lifecycle, test_native_kill_all)
+{
+	struct z_process proc;
+
+	zassert_ok(z_process_init(&proc, "spinners", NULL));
+	zassert_ok(z_process_add_thread(&proc, test_stack_0,
+					sizeof(test_stack_0),
+					native_spinner, NULL, NULL));
+	zassert_ok(z_process_add_thread(&proc, test_stack_1,
+					sizeof(test_stack_1),
+					native_spinner, NULL, NULL));
+	zassert_ok(z_process_add_thread(&proc, test_stack_2,
+					sizeof(test_stack_2),
+					native_spinner, NULL, NULL));
+
+	zassert_ok(z_process_start(&proc));
+	k_msleep(20);
+
+	zassert_ok(z_process_kill(&proc), "kill failed");
+	zassert_equal(z_process_get_state(&proc), Z_PROCESS_STATE_DEAD);
+
+	/* All threads should now be joinable immediately */
+	zassert_ok(z_process_join(&proc, K_NO_WAIT),
+		   "join after kill should be immediate");
+
+	z_process_unload(&proc);
+}
+
+/**
+ * @brief Slot-heap exhaustion returns -ENOMEM gracefully.
+ *
+ * Keep adding threads to a single process until the slot heap rejects the
+ * request.  We must succeed at least once and eventually fail; the exact
+ * count depends on @kconfig{CONFIG_PROCESS_HEAP_SIZE} and the size of
+ * @c struct k_thread for the target.
+ */
+#define HEAP_PROBE_MAX 64
+static K_THREAD_STACK_ARRAY_DEFINE(extra_stacks, HEAP_PROBE_MAX,
+				   CONFIG_PROCESS_STACK_SIZE_DEFAULT);
+
+ZTEST(process_lifecycle, test_native_heap_exhaustion)
+{
+	struct z_process proc;
+	int added = 0;
+	int last_ret = 0;
+
+	zassert_ok(z_process_init(&proc, "heap", NULL));
+
+	for (int i = 0; i < HEAP_PROBE_MAX; i++) {
+		int ret = z_process_add_thread(
+			&proc, extra_stacks[i],
+			K_THREAD_STACK_SIZEOF(extra_stacks[i]),
+			native_spinner, NULL, NULL);
+
+		if (ret == 0) {
+			added++;
+		} else {
+			last_ret = ret;
+			break;
+		}
+	}
+
+	zassert_true(added >= 1,
+		     "slot heap could not hold even one thread");
+	zassert_equal(last_ret, -ENOMEM,
+		      "expected -ENOMEM on exhaustion, got %d", last_ret);
+	zassert_equal(z_process_thread_count(&proc), (unsigned int)added,
+		      "thread_count mismatch (%u vs %d)",
+		      z_process_thread_count(&proc), added);
+
+	z_process_unload(&proc);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Native + memory domain / shared partition tests
+ * ─────────────────────────────────────────────────────────────────────── */
+
+#ifdef CONFIG_USERSPACE
+
+/*
+ * A shared partition that both worker threads will use.  We expose it to
+ * the process domain via z_process_add_partition().  Without that call,
+ * a user-mode thread would fault when touching shared_word.
+ */
+K_APPMEM_PARTITION_DEFINE(shared_part);
+K_APP_DMEM(shared_part) static volatile uint32_t shared_word;
+K_APP_BMEM(shared_part) static volatile uint32_t observed_word;
+
+static void share_writer(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+	shared_word = 0xABCD0001U;
+}
+
+static void share_reader(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
+
+	for (int i = 0; i < 100; i++) {
+		if (shared_word == 0xABCD0001U) {
+			observed_word = shared_word;
+			return;
+		}
+		k_msleep(5);
+	}
+}
+
+/**
+ * @brief A native process's user-mode threads can share a custom partition
+ *        added via z_process_add_partition().
+ */
+ZTEST(process_lifecycle, test_native_shared_partition)
+{
+	struct z_process proc;
+	struct z_process_opts opts = Z_PROCESS_OPTS_DEFAULT;
+
+	opts.user_mode = true;
+	shared_word    = 0;
+	observed_word  = 0;
+
+	zassert_ok(z_process_init(&proc, "shared", &opts));
+
+	zassert_ok(z_process_add_partition(&proc, &shared_part),
+		   "add_partition failed");
+
+	zassert_ok(z_process_add_thread(&proc, test_stack_0,
+					sizeof(test_stack_0),
+					share_writer, NULL, "w"));
+	zassert_ok(z_process_add_thread(&proc, test_stack_1,
+					sizeof(test_stack_1),
+					share_reader, NULL, "r"));
+
+	zassert_ok(z_process_start(&proc));
+	zassert_ok(z_process_join(&proc, K_SECONDS(2)));
+
+	zassert_equal(observed_word, 0xABCD0001U,
+		      "reader did not observe writer's value via shared partition (got 0x%08x)",
+		      observed_word);
+
+	z_process_unload(&proc);
+}
+
+#endif /* CONFIG_USERSPACE */
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Test suite registration

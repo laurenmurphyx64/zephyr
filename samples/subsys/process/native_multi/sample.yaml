@@ -1,0 +1,24 @@
+sample:
+  name: Process Model - Native Multi-Thread
+  description: >
+    Demonstrates a native (non-LLEXT) process containing multiple worker
+    threads that are joined together as a group via the Zephyr Process
+    Model subsystem.
+
+common:
+  tags:
+    - process
+  min_ram: 32
+  min_flash: 64
+  integration_platforms:
+    - qemu_cortex_a9
+    - qemu_x86
+    - native_sim
+
+tests:
+  sample.process.native_multi:
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "All workers done"

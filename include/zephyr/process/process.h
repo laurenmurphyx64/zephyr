@@ -11,248 +11,318 @@
  * @file
  * @brief Zephyr Process Model
  *
- * The process model provides a simplified API that unifies three Zephyr
- * subsystems into a coherent abstraction for isolated, dynamically-loaded
- * application processes:
+ * The process model groups one or more Zephyr threads into a single logical
+ * unit ("process") with a shared lifecycle and (optionally) a shared
+ * memory domain.
  *
- *  - **LLEXT** (Linkable Loadable Extensions): loads ELF binaries at runtime
- *  - **Memory Domains**: gives each process its own hardware-enforced memory
- *    partition so that one process cannot read or write another's memory
- *  - **Userspace** (optional): runs the process thread in unprivileged mode,
- *    restricting direct kernel access to the syscall interface
+ * A process may be either:
  *
- * ### Typical usage
+ *  - **Native** — its threads run entry functions that are statically linked
+ *    into the main Zephyr image.  No ELF loading and no LLEXT is involved.
+ *    When @kconfig{CONFIG_USERSPACE} is enabled, a dedicated
+ *    @c k_mem_domain is still created so the process's threads can share
+ *    their stacks (and any partitions added via
+ *    @ref z_process_add_partition) with each other while remaining
+ *    isolated from the rest of the system.
  *
- * @code{.c}
- * // 1. Define a stack (static allocation, like any Zephyr thread)
- * Z_PROCESS_STACK_DEFINE(my_stack, 2048);
+ *  - **LLEXT-backed** — code is loaded at runtime from an ELF binary via
+ *    the @ref llext API.  The extension's TEXT/DATA/RODATA/BSS regions are
+ *    added to the process's memory domain in addition to any per-thread
+ *    stack partitions, so the process is hardware-isolated from the rest
+ *    of the system.
  *
- * // 2. Declare a process descriptor (may be a global or local variable)
- * struct z_process my_proc;
- *
- * // 3. Load and immediately start the process from an ELF binary in flash
- * extern const uint8_t my_app_elf[];
- * extern const size_t  my_app_elf_size;
- *
- * z_process_spawn(&my_proc, "my_app",
- *                 my_app_elf, my_app_elf_size,
- *                 my_stack, sizeof(my_stack),
- *                 NULL);  // NULL = use defaults
- *
- * // 4. Optionally wait for it to finish
- * z_process_join(&my_proc, K_FOREVER);
- *
- * // 5. Unload and reclaim resources
- * z_process_unload(&my_proc);
- * @endcode
- *
- * ### Extension entry function
- *
- * An extension (the loadable process body) must export a function named
- * @c process_main (or whatever @ref z_process_opts::entry_sym is set to):
- *
- * @code{.c}
- * #include <zephyr/llext/symbol.h>
- *
- * void process_main(void *arg)
- * {
- *     // process code here
- * }
- * LL_EXTENSION_SYMBOL(process_main);
- * @endcode
+ * The number of threads per process is not statically bounded — threads
+ * are tracked in a linked list with per-slot heap allocations.  The size
+ * of the slot heap is controlled by @kconfig{CONFIG_PROCESS_HEAP_SIZE}.
  *
  * @defgroup process_apis Process Model
  * @since 4.2
- * @version 0.1.0
+ * @version 0.3.0
  * @ingroup os_services
  * @{
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys/slist.h>
+
+#ifdef CONFIG_PROCESS_LLEXT
 #include <zephyr/llext/llext.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** Default name of the entry-point symbol inside an extension */
+/** Default name of the entry-point symbol inside an LLEXT extension */
 #define Z_PROCESS_ENTRY_SYM "process_main"
+
+/**
+ * @brief Process backend kind
+ */
+enum z_process_kind {
+	/** Code is linked into the main image; no ELF loading. */
+	Z_PROCESS_KIND_NATIVE = 0,
+	/** Code is loaded from an ELF binary via LLEXT. */
+	Z_PROCESS_KIND_LLEXT,
+};
 
 /**
  * @brief Process lifecycle states
  */
 enum z_process_state {
-	/** Process descriptor is initialised but no extension is loaded yet */
+	/** Descriptor is initialised but holds no resources */
 	Z_PROCESS_STATE_UNLOADED = 0,
-	/** Extension loaded; process is ready to run but not yet started */
+	/** Process is ready to run (threads may be attached and started) */
 	Z_PROCESS_STATE_LOADED,
-	/** Process thread is running */
+	/** At least one process thread is running */
 	Z_PROCESS_STATE_RUNNING,
-	/** Process thread has exited normally */
+	/** All process threads have exited */
 	Z_PROCESS_STATE_DEAD,
 };
 
 /**
- * @brief Configuration options for loading and running a process
+ * @brief Configuration options for a process
  *
  * Initialise with @ref Z_PROCESS_OPTS_DEFAULT and then override individual
- * fields as needed.
+ * fields as needed.  These options apply to *all* threads of the process.
  */
 struct z_process_opts {
 	/**
-	 * Stack size for the process thread in bytes.
-	 * 0 means use @kconfig{CONFIG_PROCESS_STACK_SIZE_DEFAULT}.
+	 * Default stack size for threads added via @ref z_process_spawn.
+	 * 0 selects @kconfig{CONFIG_PROCESS_STACK_SIZE_DEFAULT}.
 	 */
 	size_t stack_size;
 
-	/**
-	 * Thread scheduling priority.
-	 * Default: @kconfig{CONFIG_PROCESS_PRIORITY_DEFAULT}.
-	 */
+	/** Default scheduling priority for threads of this process. */
 	int priority;
 
 	/**
-	 * Run the thread in unprivileged (user) mode.
-	 * Has no effect when CONFIG_USERSPACE is disabled.
+	 * Run the process threads in unprivileged (user) mode.
+	 * Requires both @kconfig{CONFIG_USERSPACE} and a process memory
+	 * domain.  For native processes the caller is responsible for
+	 * ensuring the thread entry function only calls APIs permitted to
+	 * user threads.
 	 * Default: @c true when CONFIG_USERSPACE is enabled.
 	 */
 	bool user_mode;
 
 	/**
-	 * Name of the function to call inside the extension.
-	 * The extension must export it with @ref LL_EXTENSION_SYMBOL.
-	 * NULL defaults to @ref Z_PROCESS_ENTRY_SYM ("process_main").
+	 * Publish each thread's stack as a memory partition in the process
+	 * domain so the process's threads can read/write each other's
+	 * stacks.  Only meaningful when @kconfig{CONFIG_USERSPACE} is on
+	 * (without it all kernel threads share the same address space
+	 * anyway).
+	 * Default: @c true.
+	 */
+	bool share_stacks;
+
+	/**
+	 * If @c true and @kconfig{CONFIG_PROCESS_FATAL_HANDLER} is enabled,
+	 * halt the whole system when any thread of this process triggers a
+	 * fatal error.  Otherwise the offending thread is simply aborted.
+	 * Default: @c false.
+	 */
+	bool halt_on_fault;
+
+	/**
+	 * Name of the entry-point symbol used by @ref z_process_spawn (and
+	 * @ref z_process_add_thread_sym when its @c entry_sym argument is
+	 * NULL).  NULL selects @ref Z_PROCESS_ENTRY_SYM.
 	 */
 	const char *entry_sym;
 
-	/**
-	 * Opaque argument passed to the process entry function.
-	 * The extension receives it as the @c void *arg parameter.
-	 */
+	/** Argument passed to the implicit thread created by spawn. */
 	void *arg;
 };
 
-/**
- * @brief Default initialiser for @ref z_process_opts
- *
- * @code{.c}
- * struct z_process_opts opts = Z_PROCESS_OPTS_DEFAULT;
- * opts.priority = 3;
- * @endcode
- */
+/** @brief Default initialiser for @ref z_process_opts */
 #define Z_PROCESS_OPTS_DEFAULT                                                 \
 	{                                                                      \
-		.stack_size = 0,                                               \
-		.priority   = CONFIG_PROCESS_PRIORITY_DEFAULT,                 \
-		.user_mode  = IS_ENABLED(CONFIG_USERSPACE),                    \
-		.entry_sym  = Z_PROCESS_ENTRY_SYM,                            \
-		.arg        = NULL,                                            \
+		.stack_size    = 0,                                            \
+		.priority      = CONFIG_PROCESS_PRIORITY_DEFAULT,              \
+		.user_mode     = IS_ENABLED(CONFIG_USERSPACE),                 \
+		.share_stacks  = true,                                         \
+		.halt_on_fault = false,                                        \
+		.entry_sym     = Z_PROCESS_ENTRY_SYM,                          \
+		.arg           = NULL,                                         \
 	}
 
+/** @cond INTERNAL_HIDDEN */
+
+/*
+ * Per-thread bookkeeping slot.  One instance is heap-allocated for every
+ * call to z_process_add_thread() (and friends) and linked into
+ * z_process::threads.
+ */
+struct z_process_thread {
+	sys_snode_t node;
+	struct k_thread thread;
+	k_thread_stack_t *stack;
+	size_t stack_size;
+	k_thread_entry_t entry_fn;
+	void *arg;
+	int priority;
+	bool started;
+	bool joined;
+#ifdef CONFIG_USERSPACE
+	struct k_mem_partition stack_part;
+	bool stack_part_added;
+#endif
+};
+
+/** @endcond */
+
 /**
- * @brief Process descriptor
- *
- * Holds all runtime state for one loaded process.  Must be allocated by the
- * caller (global, static, or on the heap) and must remain valid from
- * @ref z_process_load through @ref z_process_unload.
- *
- * @note Do not access this structure's fields directly; treat the descriptor
- *       as opaque and use the API functions.
+ * @brief Process descriptor.  Treat as opaque; use the API functions.
  */
 struct z_process {
 	/** @cond INTERNAL_HIDDEN */
 	char name[CONFIG_PROCESS_NAME_MAX_LEN + 1];
+	enum z_process_kind kind;
+
+#ifdef CONFIG_PROCESS_LLEXT
 	struct llext *ext;
-	llext_entry_fn_t entry_fn;
+	bool bringup_done;
+#endif
 
 #ifdef CONFIG_USERSPACE
 	struct k_mem_domain domain;
+	bool has_domain;
 #endif
 
-	struct k_thread thread;
-	k_thread_stack_t *stack;
-	size_t stack_size;
+	sys_slist_t threads;
+	unsigned int thread_count;
 
 	volatile enum z_process_state state;
 	int exit_code;
 
 	struct z_process_opts opts;
+
+	sys_snode_t reg_node;
 	/** @endcond */
 };
 
 /**
- * @brief Define a stack suitable for a process thread
- *
- * This is a convenience alias for @ref K_THREAD_STACK_DEFINE.  Use it to
- * declare a properly-aligned stack at file scope.
- *
- * @param _name  C identifier for the stack variable
- * @param _size  Stack size in bytes
+ * @brief Define a stack suitable for a process thread.
  */
 #define Z_PROCESS_STACK_DEFINE(_name, _size) K_THREAD_STACK_DEFINE(_name, _size)
 
-/**
- * @brief Load a process from an ELF image in memory
- *
- * Reads and links the ELF binary, sets up a dedicated memory domain with the
- * extension's code and data regions as partitions, and resolves the entry
- * function symbol inside the extension.
- *
- * The process will be in @ref Z_PROCESS_STATE_LOADED after this call
- * succeeds.  Call @ref z_process_start (or @ref z_process_spawn) to run it.
- *
- * @param proc       Uninitialized process descriptor
- * @param name       Human-readable name (truncated to
- *                   @kconfig{CONFIG_PROCESS_NAME_MAX_LEN} characters)
- * @param elf_data   Pointer to ELF binary data (must remain valid until
- *                   @ref z_process_unload is called when using persistent
- *                   storage, or may be freed after this call when using a
- *                   temporary buffer loader)
- * @param elf_size   Size of the ELF binary in bytes
- * @param stack      Stack memory; define with @ref Z_PROCESS_STACK_DEFINE
- * @param stack_size Size of the stack in bytes
- * @param opts       Load/run options; NULL selects all defaults
- *
- * @retval 0        Success
- * @retval -EINVAL  @p proc, @p elf_data, or @p name is NULL, or @p elf_size
- *                  is 0
- * @retval -ENOMEM  Not enough heap space to load the extension
- * @retval -ENOENT  Entry-function symbol not found in the extension
- * @retval <0       Other error from @ref llext_load or domain initialisation
- */
-int z_process_load(struct z_process *proc, const char *name,
-		   const void *elf_data, size_t elf_size,
-		   k_thread_stack_t *stack, size_t stack_size,
-		   const struct z_process_opts *opts);
+/* -------------------------------------------------------------------------
+ * Construction: native or LLEXT-backed
+ * -----------------------------------------------------------------------*/
 
 /**
- * @brief Start a previously loaded process
+ * @brief Initialise a native process descriptor.
  *
- * Creates the process thread and schedules it.  The process must be in
- * @ref Z_PROCESS_STATE_LOADED state.
+ * When @kconfig{CONFIG_USERSPACE} is enabled, a fresh (empty)
+ * @c k_mem_domain is created so subsequently-added threads can share
+ * stacks (when @c opts.share_stacks is true) and arbitrary partitions
+ * added via @ref z_process_add_partition.
  *
- * @param proc  Loaded process descriptor
+ * @param proc  Descriptor to initialise (zeroed by the call)
+ * @param name  Human-readable name
+ * @param opts  Options; NULL selects defaults
  *
- * @retval 0       Success; process is now @ref Z_PROCESS_STATE_RUNNING
- * @retval -EINVAL Process is not in @ref Z_PROCESS_STATE_LOADED state
+ * @retval 0       Success; process is in @ref Z_PROCESS_STATE_LOADED
+ * @retval -EINVAL Bad argument
+ * @retval <0      Error from @c k_mem_domain_init
+ */
+int z_process_init(struct z_process *proc, const char *name,
+		   const struct z_process_opts *opts);
+
+#ifdef CONFIG_PROCESS_LLEXT
+/**
+ * @brief Load an LLEXT-backed process from an ELF image in memory.
+ *
+ * Sets up an LLEXT and (with @kconfig{CONFIG_USERSPACE}) a memory domain
+ * containing the extension's regions.  Does not create any threads.
+ */
+int z_process_load_ext(struct z_process *proc, const char *name,
+		       const void *elf_data, size_t elf_size,
+		       const struct z_process_opts *opts);
+#endif
+
+/* -------------------------------------------------------------------------
+ * Thread attachment
+ * -----------------------------------------------------------------------*/
+
+/**
+ * @brief Attach a native-function thread to a process.
+ *
+ * The number of threads per process is bounded only by the size of the
+ * process slot heap (@kconfig{CONFIG_PROCESS_HEAP_SIZE}).
+ *
+ * @param proc        Process in LOADED state
+ * @param stack       Stack memory (e.g. via @ref Z_PROCESS_STACK_DEFINE)
+ * @param stack_size  Size of the stack in bytes
+ * @param entry       Function to run in the new thread (Zephyr thread entry
+ *                    signature: @c void(void*,void*,void*))
+ * @param arg         Opaque argument forwarded as @c p1
+ * @param thread_name Optional thread name (NULL = process name)
+ *
+ * @retval 0        Success
+ * @retval -EINVAL  Bad argument or wrong state
+ * @retval -ENOMEM  Process slot heap exhausted; raise
+ *                  @kconfig{CONFIG_PROCESS_HEAP_SIZE}
+ */
+int z_process_add_thread(struct z_process *proc,
+			 k_thread_stack_t *stack, size_t stack_size,
+			 k_thread_entry_t entry, void *arg,
+			 const char *thread_name);
+
+#ifdef CONFIG_PROCESS_LLEXT
+/**
+ * @brief Attach a thread whose entry is an exported LLEXT symbol.
+ *
+ * @param entry_sym  Symbol name (NULL = @c opts.entry_sym)
+ */
+int z_process_add_thread_sym(struct z_process *proc,
+			     k_thread_stack_t *stack, size_t stack_size,
+			     const char *entry_sym, void *arg,
+			     const char *thread_name);
+#endif
+
+/**
+ * @brief Add a memory partition to the process's domain.
+ *
+ * After this call, every thread of @p proc (current and future) can access
+ * @p part with the access mode the caller set on it.  Useful to expose a
+ * shared buffer between threads of a native or LLEXT process, or to grant
+ * a process access to a kernel-resident region that the caller controls.
+ *
+ * Requires @kconfig{CONFIG_USERSPACE}; on builds without it this function
+ * is a successful no-op.
+ *
+ * @param proc  Process in LOADED state
+ * @param part  Caller-allocated partition (must remain valid for the
+ *              lifetime of the process)
+ *
+ * @retval 0        Success (or USERSPACE disabled)
+ * @retval -EINVAL  Bad argument or process has no domain
+ * @retval <0       Error from @c k_mem_domain_add_partition
+ */
+int z_process_add_partition(struct z_process *proc,
+			    struct k_mem_partition *part);
+
+/* -------------------------------------------------------------------------
+ * Execution control
+ * -----------------------------------------------------------------------*/
+
+/**
+ * @brief Start every attached, not-yet-started thread of the process.
+ *
+ * For LLEXT-backed processes the extension's .init_array runs in supervisor
+ * mode on the first call.
+ *
+ * @retval 0        Process is now @ref Z_PROCESS_STATE_RUNNING
+ * @retval -EINVAL  No threads attached or wrong state
+ * @retval <0       LLEXT bringup error
  */
 int z_process_start(struct z_process *proc);
 
+#ifdef CONFIG_PROCESS_LLEXT
 /**
- * @brief Load a process and start it immediately (convenience helper)
- *
- * Equivalent to calling @ref z_process_load followed by @ref z_process_start.
- *
- * @param proc       Uninitialized process descriptor
- * @param name       Human-readable name
- * @param elf_data   Pointer to ELF binary data
- * @param elf_size   Size of the ELF binary in bytes
- * @param stack      Stack memory; define with @ref Z_PROCESS_STACK_DEFINE
- * @param stack_size Size of the stack in bytes
- * @param opts       Load/run options; NULL selects all defaults
- *
- * @retval 0   Success
- * @retval <0  Error from @ref z_process_load or @ref z_process_start
+ * @brief One-shot helper: load an LLEXT, attach one thread, start.
  */
 int z_process_spawn(struct z_process *proc, const char *name,
 		    const void *elf_data, size_t elf_size,
@@ -260,70 +330,62 @@ int z_process_spawn(struct z_process *proc, const char *name,
 		    const struct z_process_opts *opts);
 
 /**
- * @brief Wait for a process to finish
+ * @brief Legacy wrapper: load LLEXT + attach a single thread, but do not
+ *        start the process.
+ */
+int z_process_load(struct z_process *proc, const char *name,
+		   const void *elf_data, size_t elf_size,
+		   k_thread_stack_t *stack, size_t stack_size,
+		   const struct z_process_opts *opts);
+#endif /* CONFIG_PROCESS_LLEXT */
+
+/**
+ * @brief Wait for all process threads to finish.
  *
- * Blocks the caller until the process thread exits or the timeout expires.
- *
- * @param proc     Running or dead process descriptor
- * @param timeout  Maximum time to wait
- *
- * @retval 0       Process has exited; check @c proc->exit_code for the result
- * @retval -EAGAIN Timeout elapsed before the process exited
- * @retval -EINVAL Process is not in @ref Z_PROCESS_STATE_RUNNING or
- *                 @ref Z_PROCESS_STATE_DEAD state
+ * @param timeout  Maximum time to wait per thread.  If it expires on any
+ *                 thread, @c -EAGAIN is returned immediately.
  */
 int z_process_join(struct z_process *proc, k_timeout_t timeout);
 
 /**
- * @brief Force-terminate a running process
- *
- * Aborts the process thread.  Must be followed by @ref z_process_unload to
- * release resources.
- *
- * @param proc  Running process descriptor
- *
- * @retval 0       Success
- * @retval -EINVAL Process is not in @ref Z_PROCESS_STATE_RUNNING state
+ * @brief Abort every running thread of the process.
  */
 int z_process_kill(struct z_process *proc);
 
 /**
- * @brief Unload a process and free all resources
- *
- * Calls the extension's fini_array (C++ destructors etc.), unloads the LLEXT
- * memory regions, and resets the process descriptor to
- * @ref Z_PROCESS_STATE_UNLOADED.
- *
- * The process must **not** be in @ref Z_PROCESS_STATE_RUNNING state when this
- * is called.  Use @ref z_process_kill first if necessary.
- *
- * @param proc  Process descriptor in LOADED or DEAD state
+ * @brief Release all resources and reset the descriptor.
  */
 void z_process_unload(struct z_process *proc);
 
-/**
- * @brief Return the current state of a process
- *
- * @param proc  Process descriptor (may be in any state)
- * @returns     @ref z_process_state value
- */
+/* -------------------------------------------------------------------------
+ * Introspection
+ * -----------------------------------------------------------------------*/
+
 static inline enum z_process_state z_process_get_state(const struct z_process *proc)
 {
 	return proc->state;
 }
 
-/**
- * @brief Return the exit code of a completed process
- *
- * Valid only after the process has reached @ref Z_PROCESS_STATE_DEAD.
- *
- * @param proc  Dead process descriptor
- * @returns     Exit code set by the process (0 on normal completion)
- */
 static inline int z_process_exit_code(const struct z_process *proc)
 {
 	return proc->exit_code;
 }
+
+static inline unsigned int z_process_thread_count(const struct z_process *proc)
+{
+	return proc->thread_count;
+}
+
+/**
+ * @brief Get the @c k_thread for the @p idx-th attached thread.
+ *
+ * Threads are tracked in attachment order.  Returns NULL if @p idx is out
+ * of range (i.e. @p idx >= z_process_thread_count(proc)).  Because the
+ * underlying slot is heap-allocated, the returned pointer is only stable
+ * until the process is unloaded.
+ */
+struct k_thread *z_process_thread_get(struct z_process *proc,
+				      unsigned int idx);
 
 /** @} */
 
