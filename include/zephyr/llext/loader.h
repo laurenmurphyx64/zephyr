@@ -79,6 +79,11 @@ enum llext_storage_type {
  */
 struct llext_loader {
 	/**
+	 * @brief Length of ELF in bytes, or -1 if unknown.
+	 */
+	ssize_t len;
+
+	/**
 	 * @brief Optional function to prepare the loader for loading extension.
 	 *
 	 * @param[in] ldr Loader

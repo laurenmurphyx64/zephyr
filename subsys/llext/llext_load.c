@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/arch/common/instr_mem.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/llext/elf.h>
 #include <zephyr/llext/loader.h>
@@ -149,6 +150,26 @@ static int llext_load_elf_data(struct llext_loader *ldr, struct llext *ext)
 		}
 	}
 
+#ifdef CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM
+	uintptr_t *buf_start = (uintptr_t *)llext_peek(ldr, 0);
+
+	/* Enforce that configuration only supports the buffer loader */
+	if (ldr->len < 0) {
+		LOG_ERR("Unknown ELF length or unsupported loader type for "
+			"ELF in word-granular instruction memory");
+		return -ENOEXEC;
+	}
+
+	uintptr_t *buf_end = (uintptr_t *)(buf_start + ldr->len);
+
+	if ((uintptr_t)buf_start & 3 || (uintptr_t)buf_end & 3) {
+		LOG_ERR("ELF in word-granular instruction memory has word unaligned "
+			"start and / or end: start=%p, end=%p",
+			buf_start, buf_end);
+		return -ENOEXEC;
+	}
+#endif
+
 	return 0;
 }
 
@@ -182,24 +203,24 @@ static int llext_find_tables(struct llext_loader *ldr, struct llext *ext)
 
 		if (shdr->sh_type == SHT_SYMTAB && ldr->hdr.e_type == ET_REL) {
 			LOG_DBG("symtab at %d", i);
-			memcpy(&ldr->sects[LLEXT_MEM_SYMTAB], shdr, sizeof(*shdr));
+			arch_memcpy_i2d(&ldr->sects[LLEXT_MEM_SYMTAB], shdr, sizeof(*shdr));
 			ldr->sect_map[i].mem_idx = LLEXT_MEM_SYMTAB;
 			strtab_ndx = shdr->sh_link;
 			table_cnt++;
 		} else if (shdr->sh_type == SHT_DYNSYM && ldr->hdr.e_type == ET_DYN) {
 			LOG_DBG("dynsym at %d", i);
-			memcpy(&ldr->sects[LLEXT_MEM_SYMTAB], shdr, sizeof(*shdr));
+			arch_memcpy_i2d(&ldr->sects[LLEXT_MEM_SYMTAB], shdr, sizeof(*shdr));
 			ldr->sect_map[i].mem_idx = LLEXT_MEM_SYMTAB;
 			strtab_ndx = shdr->sh_link;
 			table_cnt++;
 		} else if (shdr->sh_type == SHT_STRTAB && i == shstrtab_ndx) {
 			LOG_DBG("shstrtab at %d", i);
-			memcpy(&ldr->sects[LLEXT_MEM_SHSTRTAB], shdr, sizeof(*shdr));
+			arch_memcpy_i2d(&ldr->sects[LLEXT_MEM_SHSTRTAB], shdr, sizeof(*shdr));
 			ldr->sect_map[i].mem_idx = LLEXT_MEM_SHSTRTAB;
 			table_cnt++;
 		} else if (shdr->sh_type == SHT_STRTAB && i == strtab_ndx) {
 			LOG_DBG("strtab at %d", i);
-			memcpy(&ldr->sects[LLEXT_MEM_STRTAB], shdr, sizeof(*shdr));
+			arch_memcpy_i2d(&ldr->sects[LLEXT_MEM_STRTAB], shdr, sizeof(*shdr));
 			ldr->sect_map[i].mem_idx = LLEXT_MEM_STRTAB;
 			table_cnt++;
 		}
@@ -364,7 +385,7 @@ static int llext_map_sections(struct llext_loader *ldr, struct llext *ext,
 			/* First section of this type, copy all info to the
 			 * region descriptor.
 			 */
-			memcpy(region, shdr, sizeof(*region));
+			arch_memcpy_i2d(region, shdr, sizeof(*region));
 			continue;
 		}
 

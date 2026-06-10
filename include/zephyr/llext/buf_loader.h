@@ -44,6 +44,7 @@ void *llext_buf_peek(struct llext_loader *ldr, size_t pos);
 	{                                                                                          \
 		.loader =                                                                          \
 			{                                                                          \
+				.len = (_buf_len),                                                 \
 				.prepare = NULL,                                                   \
 				.read = llext_buf_read,                                            \
 				.seek = llext_buf_seek,                                            \
@@ -52,7 +53,6 @@ void *llext_buf_peek(struct llext_loader *ldr, size_t pos);
 				.storage = _storage,                                               \
 			},                                                                         \
 		.buf = (_buf),                                                                     \
-		.len = (_buf_len),                                                                 \
 		.pos = 0,                                                                          \
 	}
 /** @endcond */

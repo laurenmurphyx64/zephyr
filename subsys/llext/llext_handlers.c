@@ -7,6 +7,7 @@
 #include <string.h>
 #include <zephyr/llext/llext.h>
 #include <zephyr/llext/loader.h>
+#include <zephyr/arch/common/instr_mem.h>
 #include <zephyr/internal/syscall_handler.h>
 #include <zephyr/kernel.h>
 
@@ -39,14 +40,14 @@ ssize_t z_impl_llext_get_fn_table(struct llext *ext, bool is_init, void *buf, si
 
 		if (is_init) {
 			/* setup functions from preinit_array and init_array */
-			memcpy(byte_ptr,
-			       ext->mem[LLEXT_MEM_PREINIT], ext->mem_size[LLEXT_MEM_PREINIT]);
-			memcpy(byte_ptr + ext->mem_size[LLEXT_MEM_PREINIT],
-			       ext->mem[LLEXT_MEM_INIT], ext->mem_size[LLEXT_MEM_INIT]);
+			arch_memcpy_i2d(byte_ptr, ext->mem[LLEXT_MEM_PREINIT],
+					ext->mem_size[LLEXT_MEM_PREINIT]);
+			arch_memcpy_i2d(byte_ptr + ext->mem_size[LLEXT_MEM_PREINIT],
+					ext->mem[LLEXT_MEM_INIT], ext->mem_size[LLEXT_MEM_INIT]);
 		} else {
 			/* cleanup functions from fini_array */
-			memcpy(byte_ptr,
-			       ext->mem[LLEXT_MEM_FINI], ext->mem_size[LLEXT_MEM_FINI]);
+			arch_memcpy_i2d(byte_ptr, ext->mem[LLEXT_MEM_FINI],
+					ext->mem_size[LLEXT_MEM_FINI]);
 		}
 
 		/* Sanity check: pointers in this table must map inside the

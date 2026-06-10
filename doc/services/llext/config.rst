@@ -244,6 +244,39 @@ LLEXT subsystem to optimize memory footprint in this case.
            information on this topic is available on GitHub issue `#75341
            <https://github.com/zephyrproject-rtos/zephyr/issues/75341>`_.
 
+.. _llext_kconfig_word_granular_memory:
+
+Word granular instruction memory support
+----------------------------------------
+
+Certain memory, such as Xtensa IRAM, do not support narrow and / or
+unaligned accesses. If the ELF buffer or heap are placed in such memory,
+the LLEXT subsystem will trigger exceptions during linking, loading and
+operation. The following option forces word sized and aligned access to
+an ELF buffer placed in word granular instruction memory.
+
+:kconfig:option:`CONFIG_LLEXT_ELF_IN_WORD_GRANULAR_INSTR_MEM`
+
+        Select if ELF buffer has been placed in word granular instruction
+        memory. When this option is enabled, the LLEXT subsystem will
+        require load and store operations during loading and linking against
+        the ELF buffer in word granular instruction memory to be word sized
+        and aligned. LLEXT will also copy the string tables and rodata onto
+        the heap to facilitate the use of strings. The heap must not be
+        placed in word granular instruction memory. Only supported by the
+        buffer loader. The buffer loader must be given a buffer with a
+        start that is word aligned and a length that is a multiple of the
+        word size.
+
+        Users may copy their ELF buffers into word granular instruction memory using
+        :c:func:`memset_word_granular` and :c:func:`memcpy_to_word_granular`.
+
+        This option does not prevent the extension itself from performing
+        unsupported accesses at runtime.
+
+Support for word granular instruction memory is currently only available
+for Xtensa without VLIW, but it may be extended as requested in the future.
+
 .. _llext_symbol_groups:
 
 Symbol Groups
