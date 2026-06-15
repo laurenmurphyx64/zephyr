@@ -249,7 +249,7 @@ int llext_lookup_symbol(struct llext_loader *ldr, struct llext *ext, uintptr_t *
 }
 
 static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_t *shdr,
-			  const struct llext_load_param *ldr_parm, elf_shdr_t *tgt)
+			  const struct llext_load_param *ldr_parm, elf_shdr_t *tgt, bool relink)
 {
 	unsigned int sh_cnt = shdr->sh_size / shdr->sh_entsize;
 	/*
@@ -342,7 +342,7 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 			continue;
 		}
 
-		uint8_t *rel_addr = (uint8_t *)ext->mem[LLEXT_MEM_TEXT] -
+		uint8_t *rel_addr = (uint8_t *)ext->text_in_elf -
 			ldr->sects[LLEXT_MEM_TEXT].sh_offset;
 
 		if (tgt) {
@@ -353,6 +353,14 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 					(size_t)rela.r_offset, (size_t)tgt->sh_size);
 				continue;
 			}
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+			// Need rel_addr to land in the heap where the TEXT region is now
+			LOG_DBG("Relocation applies to section %d in memory region %d", tgt->sh_info, ldr->sect_map[tgt->sh_info].mem_idx);
+			if (relink && ldr->sect_map[tgt->sh_info].mem_idx == LLEXT_MEM_TEXT) {
+				LOG_DBG("Rerouting to text on heap");
+				rel_addr = (uint8_t *)ext->mem[LLEXT_MEM_TEXT] - ldr->sects[LLEXT_MEM_TEXT].sh_offset;
+			}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 			rel_addr += rela.r_offset + tgt->sh_offset;
 		} else {
 			/* Shared / dynamically linked ELF */
@@ -369,6 +377,23 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 
 		uint32_t stb = ELF_ST_BIND(sym.st_info);
 		const void *link_addr;
+
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+		if (relink) { // Relink is gross, refactor
+			/* Only perform relocation if symbol address is in text region */
+			elf32_half shndx = sym.st_shndx;
+
+			if (shndx == SHN_UNDEF || shndx >= SHN_LORESERVE) {
+				continue;
+			}
+
+			if (ldr->sect_map[shndx].mem_idx != LLEXT_MEM_TEXT) {
+				continue;
+			}
+
+			LOG_DBG("Performing symbol from text PLT relocation");
+		}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 
 		switch (stb) {
 		case STB_GLOBAL:
@@ -399,6 +424,7 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 				}
 				break;
 			}
+			LOG_DBG("link_addr %p", (void *)link_addr);
 
 			/* Resolve the symbol */
 			ret = arch_elf_relocate_global(ldr, ext, &rela, &sym, rel_addr, link_addr);
@@ -414,8 +440,8 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 		}
 
 		if (!link_err) {
-			LOG_DBG("symbol %s relocation @%p r-offset %#zx .text offset %#zx stb %u",
-				name, (void *)rel_addr, (size_t)rela.r_offset,
+			LOG_DBG("symbol %s shndx reg %u relocation @%p r-offset %#zx .text offset %#zx stb %u",
+				name, ldr->sect_map[sym.st_shndx].mem_idx, (void *)rel_addr, (size_t)rela.r_offset,
 				(size_t)ldr->sects[LLEXT_MEM_TEXT].sh_offset, stb);
 		}
 	}
@@ -423,7 +449,8 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 	return link_err;
 }
 
-int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_load_param *ldr_parm)
+// Relink is gross, refactor
+int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_load_param *ldr_parm, bool relink)
 {
 	uintptr_t sect_base = 0;
 	elf_rela_t rel = {0};
@@ -502,7 +529,7 @@ int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_l
 				tgt = ext->sect_hdrs + shdr->sh_info;
 			}
 
-			ret = llext_link_plt(ldr, ext, shdr, ldr_parm, tgt);
+			ret = llext_link_plt(ldr, ext, shdr, ldr_parm, tgt, relink);
 			if (ret < 0) {
 				return ret;
 			}
@@ -538,7 +565,7 @@ int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_l
 				return ret;
 			}
 
-#if CONFIG_LLEXT_LOG_LEVEL > LOG_LEVEL_INF /* also gets skipped without CONFIG_LOG */
+#if (CONFIG_LLEXT_LOG_LEVEL > LOG_LEVEL_INF) || CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM /* also gets skipped without CONFIG_LOG */
 			uintptr_t link_addr;
 			uintptr_t op_loc = llext_get_reloc_instruction_location(ldr, ext,
 										shdr->sh_info,
@@ -580,6 +607,22 @@ int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_l
 				inv_str, (int)ELF_R_TYPE(rel.r_info), op_loc, name, link_addr);
 #endif /* CONFIG_LLEXT_LOG_LEVEL > LOG_LEVEL_INF */
 
+// #ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+// 			if (relink) { // Relink is gross, refactor
+// 				/* Only perform relocation if symbol address is in text region */
+// 				elf32_half shndx = sym.st_shndx;
+
+// 				if (shndx == SHN_UNDEF || shndx >= SHN_LORESERVE) {
+// 					continue;
+// 				}
+
+// 				if (ldr->sect_map[shndx].mem_idx != LLEXT_MEM_TEXT) {
+// 					continue;
+// 				}
+
+// 				LOG_DBG("Performing symbol from text relocation");
+// 			}
+// #endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 			/* relocation, collect first error */
 			ret = arch_elf_relocate(ldr, ext, &rel, shdr);
 			if (link_err == 0) {

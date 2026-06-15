@@ -51,6 +51,7 @@ extern struct k_mutex llext_lock;
  * Memory management (llext_mem.c)
  */
 
+int llext_get_region_alloc_align(elf_shdr_t *region, uintptr_t *region_alloc, uintptr_t *region_align);
 int llext_copy_strings(struct llext_loader *ldr, struct llext *ext,
 		       const struct llext_load_param *ldr_parm);
 int llext_copy_regions(struct llext_loader *ldr, struct llext *ext,
@@ -69,8 +70,9 @@ int do_llext_load(struct llext_loader *ldr, struct llext *ext,
  * Relocation (llext_link.c)
  */
 
+// Relink is gross, refactor
 int llext_link(struct llext_loader *ldr, struct llext *ext,
-	       const struct llext_load_param *ldr_parm);
+	       const struct llext_load_param *ldr_parm, bool relink);
 ssize_t llext_file_offset(struct llext_loader *ldr, uintptr_t offset);
 void llext_dependency_remove_all(struct llext *ext);
 

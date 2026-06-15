@@ -125,6 +125,8 @@ struct llext {
 	/** Lookup table of memory regions */
 	void *mem[LLEXT_MEM_COUNT];
 
+	void *text_in_elf; // Yes this is also gross, to remove
+
 	/** Is the memory for this region allocated on heap? */
 	bool mem_on_heap[LLEXT_MEM_COUNT];
 

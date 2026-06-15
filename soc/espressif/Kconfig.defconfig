@@ -5,4 +5,8 @@ if SOC_FAMILY_ESPRESSIF_ESP32
 
 rsource "*/Kconfig.defconfig"
 
+config HARVARD
+	bool
+	default y
+
 endif # SOC_FAMILY_ESPRESSIF_ESP32

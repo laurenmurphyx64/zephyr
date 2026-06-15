@@ -57,6 +57,48 @@ static void llext_init_mem_part(struct llext *ext, enum llext_mem mem_idx,
 	LOG_DBG("region %d: start %#zx, size %zd", mem_idx, (size_t)start, len);
 }
 
+int llext_get_region_alloc_align(elf_shdr_t *region, uintptr_t *region_alloc, uintptr_t *region_align)
+{
+	if (!region) {
+		return -EINVAL;
+	}
+
+	*region_alloc = region->sh_size;
+	*region_align = region->sh_addralign;
+
+	/*
+	 * Calculate the minimum region size and alignment that can satisfy
+	 * MMU/MPU requirements. This only applies to regions that contain
+	 * program-accessible data (not to string tables, for example).
+	 */
+	if (region->sh_flags & SHF_ALLOC) {
+		if (IS_ENABLED(CONFIG_MMU)) {
+			/* MMU targets map memory in page-sized chunks. Round
+			 * the region to multiples of those.
+			 */
+			*region_alloc = ROUND_UP(*region_alloc, LLEXT_PAGE_SIZE);
+			*region_align = MAX(*region_align, LLEXT_PAGE_SIZE);
+		} else if (IS_ENABLED(CONFIG_USERSPACE)) {
+			if (IS_ENABLED(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)) {
+				/* Some MPU architectures (ARMv7-M, older ARC) require regions
+				 * to be sized and aligned to the same power of two.
+				 */
+				uintptr_t block_sz =
+					MAX(MAX(*region_alloc, *region_align), LLEXT_PAGE_SIZE);
+
+				block_sz = 1 << LOG2CEIL(block_sz); /* align to next power of two */
+				*region_alloc = block_sz;
+				*region_align = block_sz;
+			} else if (IS_ENABLED(CONFIG_ARM_MPU) || IS_ENABLED(CONFIG_ARC_MPU)) {
+				/* ARMv8-M and newer ARC MPUs use 32-byte alignment. */
+				*region_alloc = ROUND_UP(*region_alloc, LLEXT_PAGE_SIZE);
+				*region_align = MAX(*region_align, LLEXT_PAGE_SIZE);
+			}
+		}
+	}
+	return 0;
+}
+
 static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			      enum llext_mem mem_idx, const struct llext_load_param *ldr_parm)
 {
@@ -70,36 +112,7 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	}
 	ext->mem_size[mem_idx] = region_alloc;
 
-	/*
-	 * Calculate the minimum region size and alignment that can satisfy
-	 * MMU/MPU requirements. This only applies to regions that contain
-	 * program-accessible data (not to string tables, for example).
-	 */
-	if (region->sh_flags & SHF_ALLOC) {
-		if (IS_ENABLED(CONFIG_MMU)) {
-			/* MMU targets map memory in page-sized chunks. Round
-			 * the region to multiples of those.
-			 */
-			region_alloc = ROUND_UP(region_alloc, LLEXT_PAGE_SIZE);
-			region_align = MAX(region_align, LLEXT_PAGE_SIZE);
-		} else if (IS_ENABLED(CONFIG_USERSPACE)) {
-			if (IS_ENABLED(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT)) {
-				/* Some MPU architectures (ARMv7-M, older ARC) require regions
-				 * to be sized and aligned to the same power of two.
-				 */
-				uintptr_t block_sz =
-					MAX(MAX(region_alloc, region_align), LLEXT_PAGE_SIZE);
-
-				block_sz = 1 << LOG2CEIL(block_sz); /* align to next power of two */
-				region_alloc = block_sz;
-				region_align = block_sz;
-			} else if (IS_ENABLED(CONFIG_ARM_MPU) || IS_ENABLED(CONFIG_ARC_MPU)) {
-				/* ARMv8-M and newer ARC MPUs use 32-byte alignment. */
-				region_alloc = ROUND_UP(region_alloc, LLEXT_PAGE_SIZE);
-				region_align = MAX(region_align, LLEXT_PAGE_SIZE);
-			}
-		}
-	}
+	llext_get_region_alloc_align(region, &region_alloc, &region_align);
 
 	if (ldr->storage == LLEXT_STORAGE_WRITABLE ||           /* writable storage         */
 	    (ldr->storage == LLEXT_STORAGE_PERSISTENT &&        /* || persistent storage    */
@@ -117,11 +130,14 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 				     ldr_parm->pre_located) &&
 				    ((mem_idx != LLEXT_MEM_TEXT) ||
-				     INSTR_FETCHABLE(ext->mem[mem_idx], region_alloc))) {
+				     (INSTR_FETCHABLE(ext->mem[mem_idx], region_alloc) || CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM))) {
 					/* Map this region directly to the ELF buffer */
 					llext_init_mem_part(ext, mem_idx,
 							    (uintptr_t)ext->mem[mem_idx],
 							    region_alloc);
+					if (mem_idx == LLEXT_MEM_TEXT) {
+						ext->text_in_elf = ext->mem[LLEXT_MEM_TEXT];
+					}
 					ext->mem_on_heap[mem_idx] = false;
 					return 0;
 				}
