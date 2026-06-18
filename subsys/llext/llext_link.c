@@ -249,7 +249,7 @@ int llext_lookup_symbol(struct llext_loader *ldr, struct llext *ext, uintptr_t *
 }
 
 static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_t *shdr,
-			  const struct llext_load_param *ldr_parm, elf_shdr_t *tgt, bool relink)
+			  const struct llext_load_param *ldr_parm, elf_shdr_t *tgt)
 {
 	unsigned int sh_cnt = shdr->sh_size / shdr->sh_entsize;
 	/*
@@ -354,9 +354,9 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 				continue;
 			}
 #ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
-			// Need rel_addr to land in the heap where the TEXT region is now
-			LOG_DBG("Relocation applies to section %d in memory region %d", tgt->sh_info, ldr->sect_map[tgt->sh_info].mem_idx);
-			if (relink && ldr->sect_map[tgt->sh_info].mem_idx == LLEXT_MEM_TEXT) {
+			LOG_DBG("Relocation applies to section %d in memory region %d", shdr->sh_info, ldr->sect_map[shdr->sh_info].mem_idx); // TODO: Remove
+			/* Need rel_addr to land in the heap where the TEXT region is now */
+			if (ldr->sect_map[shdr->sh_info].mem_idx == LLEXT_MEM_TEXT) {
 				LOG_DBG("Rerouting to text on heap");
 				rel_addr = (uint8_t *)ext->mem[LLEXT_MEM_TEXT] - ldr->sects[LLEXT_MEM_TEXT].sh_offset;
 			}
@@ -372,28 +372,21 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 				continue;
 			}
 
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+			/* Need rel_addr to land in the heap where TEXT region is now */
+			ssize_t text_offset = (ssize_t) ext->text_in_elf - (ssize_t) llext_peek(ldr, 0);
+			if (offset >= text_offset && offset < text_offset + ext->mem_size[LLEXT_MEM_TEXT]) {
+				rel_addr = (uint8_t *)ext->mem[LLEXT_MEM_TEXT] - ldr->sects[LLEXT_MEM_TEXT].sh_offset;
+			}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
+
 			rel_addr += offset;
 		}
 
+		LOG_DBG("rel_addr %p", (void *)rel_addr);
+
 		uint32_t stb = ELF_ST_BIND(sym.st_info);
 		const void *link_addr;
-
-#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
-		if (relink) { // Relink is gross, refactor
-			/* Only perform relocation if symbol address is in text region */
-			elf32_half shndx = sym.st_shndx;
-
-			if (shndx == SHN_UNDEF || shndx >= SHN_LORESERVE) {
-				continue;
-			}
-
-			if (ldr->sect_map[shndx].mem_idx != LLEXT_MEM_TEXT) {
-				continue;
-			}
-
-			LOG_DBG("Performing symbol from text PLT relocation");
-		}
-#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 
 		switch (stb) {
 		case STB_GLOBAL:
@@ -449,8 +442,7 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 	return link_err;
 }
 
-// Relink is gross, refactor
-int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_load_param *ldr_parm, bool relink)
+int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_load_param *ldr_parm)
 {
 	uintptr_t sect_base = 0;
 	elf_rela_t rel = {0};
@@ -529,7 +521,7 @@ int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_l
 				tgt = ext->sect_hdrs + shdr->sh_info;
 			}
 
-			ret = llext_link_plt(ldr, ext, shdr, ldr_parm, tgt, relink);
+			ret = llext_link_plt(ldr, ext, shdr, ldr_parm, tgt);
 			if (ret < 0) {
 				return ret;
 			}
@@ -607,22 +599,6 @@ int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_l
 				inv_str, (int)ELF_R_TYPE(rel.r_info), op_loc, name, link_addr);
 #endif /* CONFIG_LLEXT_LOG_LEVEL > LOG_LEVEL_INF */
 
-// #ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
-// 			if (relink) { // Relink is gross, refactor
-// 				/* Only perform relocation if symbol address is in text region */
-// 				elf32_half shndx = sym.st_shndx;
-
-// 				if (shndx == SHN_UNDEF || shndx >= SHN_LORESERVE) {
-// 					continue;
-// 				}
-
-// 				if (ldr->sect_map[shndx].mem_idx != LLEXT_MEM_TEXT) {
-// 					continue;
-// 				}
-
-// 				LOG_DBG("Performing symbol from text relocation");
-// 			}
-// #endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 			/* relocation, collect first error */
 			ret = arch_elf_relocate(ldr, ext, &rel, shdr);
 			if (link_err == 0) {

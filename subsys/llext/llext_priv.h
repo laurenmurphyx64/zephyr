@@ -72,7 +72,7 @@ int do_llext_load(struct llext_loader *ldr, struct llext *ext,
 
 // Relink is gross, refactor
 int llext_link(struct llext_loader *ldr, struct llext *ext,
-	       const struct llext_load_param *ldr_parm, bool relink);
+	       const struct llext_load_param *ldr_parm);
 ssize_t llext_file_offset(struct llext_loader *ldr, uintptr_t offset);
 void llext_dependency_remove_all(struct llext *ext);
 

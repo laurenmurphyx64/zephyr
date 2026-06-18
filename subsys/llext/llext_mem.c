@@ -130,16 +130,18 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 				     ldr_parm->pre_located) &&
 				    ((mem_idx != LLEXT_MEM_TEXT) ||
-				     (INSTR_FETCHABLE(ext->mem[mem_idx], region_alloc) || CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM))) {
+				     (INSTR_FETCHABLE(ext->mem[mem_idx], region_alloc) && !CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM))) {
 					/* Map this region directly to the ELF buffer */
 					llext_init_mem_part(ext, mem_idx,
 							    (uintptr_t)ext->mem[mem_idx],
 							    region_alloc);
-					if (mem_idx == LLEXT_MEM_TEXT) {
-						ext->text_in_elf = ext->mem[LLEXT_MEM_TEXT];
-					}
 					ext->mem_on_heap[mem_idx] = false;
 					return 0;
+				}
+
+				// TODO: Remove
+				if (mem_idx == LLEXT_MEM_TEXT && CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM) {
+					LOG_DBG("Putting text in heap");
 				}
 
 				if ((mem_idx == LLEXT_MEM_TEXT) &&
@@ -186,6 +188,12 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 #ifdef CONFIG_LLEXT_HEAP_MEMBLK
 	/* If allocating to heap, allocation must be multiple of block size */
 	region_alloc = ROUND_UP(region_alloc, CONFIG_LLEXT_HEAP_MEMBLK_BLOCK_SIZE);
+#endif
+
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+	if (mem_idx == LLEXT_MEM_TEXT) {
+		ext->text_in_elf = ext->mem[LLEXT_MEM_TEXT];
+	}
 #endif
 
 	/* Allocate a suitably aligned area for the region. */

@@ -11,7 +11,6 @@
 #include <zephyr/llext/llext.h>
 #include <zephyr/llext/llext_internal.h>
 #include <zephyr/kernel.h>
-#include <zephyr/arch/common/instr_mem.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
@@ -943,46 +942,12 @@ int do_llext_load(struct llext_loader *ldr, struct llext *ext,
 
 	if (ldr_parm->relocate_local) {
 		LOG_DBG("Linking ELF...");
-		ret = llext_link(ldr, ext, ldr_parm, false);
+		ret = llext_link(ldr, ext, ldr_parm);
 		if (ret != 0) {
 			LOG_ERR("Failed to link, ret %d", ret);
 			goto out;
 		}
 	}
-
-#if defined(CONFIG_XTENSA) && defined(CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM)
-	LOG_DBG("Copying linked text region to instruction heap...");
-	uintptr_t region_alloc;
-	uintptr_t region_align;
-	ret = llext_get_region_alloc_align(ldr->sects + LLEXT_MEM_TEXT, &region_alloc, &region_align);
-	if (ret != 0) {
-		LOG_ERR("Failed to get text region alloc and align, ret %d", ret);
-		goto out;
-	}
-	void *instr_mem = llext_aligned_alloc_instr(ext, region_align, region_alloc);
-	if (!instr_mem) {
-		LOG_ERR("Failed to allocate text region on instruction heap, ret %d", ret);
-		goto out;
-	}
-	ret = (int) arch_memcpy_d2i(instr_mem, ext->mem[LLEXT_MEM_TEXT], ext->mem_size[LLEXT_MEM_TEXT]);
-	if (ret == 0) {
-		LOG_ERR("Failed to copy text region to instruction heap, ret %d", ret);
-		goto out;
-	}
-	ext->mem_on_heap[LLEXT_MEM_TEXT] = true;
-	ext->mem[LLEXT_MEM_TEXT] = instr_mem;
-	
-	// TODO: Just update symbols in text section
-	LOG_DBG("Re-copying symbols to update symbols in text section...");
-	ret = llext_copy_symbols(ldr, ext, ldr_parm);
-	if (ret != 0) {
-		LOG_ERR("Failed to recopy symbols, ret %d", ret);
-		goto out;
-	}
-
-	LOG_DBG("Re-doing relocations for text-located symbols");
-	ret = llext_link(ldr, ext, ldr_parm, true);
-#endif
 
 	ret = llext_export_symbols(ldr, ext, ldr_parm);
 	if (ret != 0) {

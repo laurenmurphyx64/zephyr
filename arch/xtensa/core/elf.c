@@ -189,6 +189,8 @@ int arch_elf_relocate_local(struct llext_loader *ldr, struct llext *ext, const e
 		sh_addr = ldr->sects[LLEXT_MEM_TEXT].sh_addr;
 	}
 
+	LOG_DBG("sh_addr %p", (void *)sh_addr);
+
 	return xtensa_elf_relocate(ldr, ext, rel, sh_addr, rel_addr, type,
 				   ELF_ST_BIND(sym->st_info), ldr_parm);
 }
