@@ -6,16 +6,28 @@
  */
 
 #include <zephyr/llext/buf_loader.h>
+#include <zephyr/arch/common/instr_mem.h>
 #include <zephyr/sys/util.h>
 #include <string.h>
 
-int llext_buf_read(struct llext_loader *l, void *buf, size_t len)
+int llext_buf_read(struct llext_loader *l, struct llext *ext, void *buf, size_t len)
 {
 	struct llext_buf_loader *buf_l = CONTAINER_OF(l, struct llext_buf_loader, loader);
 	size_t end = MIN(buf_l->pos + len, buf_l->len);
 	size_t read_len = end - buf_l->pos;
+	const uint8_t *src = buf_l->buf + buf_l->pos;
 
-	memcpy(buf, buf_l->buf + buf_l->pos, read_len);
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+	if (src >= (uint8_t *)ext->text_in_elf &&
+	    src + read_len <= ((uint8_t *)ext->text_in_elf + ext->mem_size[LLEXT_MEM_TEXT])) {
+		arch_memcpy_d2i(buf, src, read_len);
+	} else {
+#endif
+		memcpy(buf, src, read_len);
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+	}
+#endif
+
 	buf_l->pos = end;
 
 	return 0;

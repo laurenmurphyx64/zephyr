@@ -117,7 +117,8 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 				     ldr_parm->pre_located) &&
 				    ((mem_idx != LLEXT_MEM_TEXT) ||
-				     INSTR_FETCHABLE(ext->mem[mem_idx], region_alloc))) {
+				     (INSTR_FETCHABLE(ext->mem[mem_idx], region_alloc) &&
+				      !IS_ENABLED(CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM)))) {
 					/* Map this region directly to the ELF buffer */
 					llext_init_mem_part(ext, mem_idx,
 							    (uintptr_t)ext->mem[mem_idx],
@@ -172,6 +173,12 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 	region_alloc = ROUND_UP(region_alloc, CONFIG_LLEXT_HEAP_MEMBLK_BLOCK_SIZE);
 #endif
 
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+	if (mem_idx == LLEXT_MEM_TEXT) {
+		ext->text_in_elf = ext->mem[LLEXT_MEM_TEXT];
+	}
+#endif
+
 	/* Allocate a suitably aligned area for the region. */
 	if (region->sh_flags & SHF_EXECINSTR) {
 		ext->mem[mem_idx] = llext_aligned_alloc_instr(ext, region_align, region_alloc);
@@ -213,7 +220,7 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			goto err;
 		}
 
-		ret = llext_read(ldr, (void *)base, length);
+		ret = llext_read(ldr, ext, (void *)base, length);
 		if (ret != 0) {
 			goto err;
 		}

@@ -118,7 +118,7 @@ static int llext_riscv_find_sym_pcrel(struct llext_loader *ldr, struct llext *ex
 			return ret;
 		}
 
-		ret = llext_read(ldr, &candidate, shdr->sh_entsize);
+		ret = llext_read(ldr, ext, &candidate, shdr->sh_entsize);
 		if (ret != 0) {
 			return ret;
 		}
@@ -170,7 +170,7 @@ static int llext_riscv_find_sym_pcrel(struct llext_loader *ldr, struct llext *ex
 		return ret;
 	}
 
-	ret = llext_read(ldr, &candidate_sym, sizeof(elf_sym_t));
+	ret = llext_read(ldr, ext, &candidate_sym, sizeof(elf_sym_t));
 	if (ret != 0) {
 		return ret;
 	}

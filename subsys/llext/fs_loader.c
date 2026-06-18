@@ -29,7 +29,7 @@ int llext_fs_prepare(struct llext_loader *l)
 	return 0;
 }
 
-int llext_fs_read(struct llext_loader *l, void *buf, size_t len)
+int llext_fs_read(struct llext_loader *l, struct llext *ext, void *buf, size_t len)
 {
 	int ret = 0;
 	struct llext_fs_loader *fs_l = CONTAINER_OF(l, struct llext_fs_loader, loader);

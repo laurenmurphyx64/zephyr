@@ -28,6 +28,14 @@ struct llext_elf_sect_map {
 
 const void *llext_loaded_sect_ptr(struct llext_loader *ldr, struct llext *ext, unsigned int sh_ndx);
 
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+static inline bool llext_addr_in_text(const struct llext *ext, uint8_t *addr)
+{
+	const uint8_t *text = ext->mem[LLEXT_MEM_TEXT];
+
+	return (addr >= text && addr < (text + ext->mem_size[LLEXT_MEM_TEXT]));
+}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 
 static inline const char *llext_string(const struct llext_loader *ldr, const struct llext *ext,
 	enum llext_mem mem_idx, unsigned int idx)

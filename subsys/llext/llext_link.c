@@ -158,7 +158,7 @@ int llext_read_symbol(struct llext_loader *ldr, struct llext *ext, const elf_rel
 		return ret;
 	}
 
-	ret = llext_read(ldr, sym, sizeof(elf_sym_t));
+	ret = llext_read(ldr, ext, sym, sizeof(elf_sym_t));
 
 	return ret;
 }
@@ -279,7 +279,7 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 		int ret = llext_seek(ldr, shdr->sh_offset + i * shdr->sh_entsize);
 
 		if (!ret) {
-			ret = llext_read(ldr, &rela, sizeof(rela));
+			ret = llext_read(ldr, ext, &rela, sizeof(rela));
 		}
 
 		if (ret != 0) {
@@ -299,7 +299,7 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 
 		ret = llext_seek(ldr, sym_shdr->sh_offset + j * sizeof(elf_sym_t));
 		if (!ret) {
-			ret = llext_read(ldr, &sym, sizeof(sym));
+			ret = llext_read(ldr, ext, &sym, sizeof(sym));
 		}
 
 		if (ret != 0) {
@@ -342,8 +342,8 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 			continue;
 		}
 
-		uint8_t *rel_addr = (uint8_t *)ext->mem[LLEXT_MEM_TEXT] -
-			ldr->sects[LLEXT_MEM_TEXT].sh_offset;
+		uint8_t *rel_addr =
+			(uint8_t *)ext->text_in_elf - ldr->sects[LLEXT_MEM_TEXT].sh_offset;
 
 		if (tgt) {
 			/* Relocatable / partially linked ELF. */
@@ -353,6 +353,13 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 					(size_t)rela.r_offset, (size_t)tgt->sh_size);
 				continue;
 			}
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+			/* Relocation needs to land in the heap where the TEXT region is now */
+			if (ldr->sect_map[shdr->sh_info].mem_idx == LLEXT_MEM_TEXT) {
+				rel_addr = (uint8_t *)ext->mem[LLEXT_MEM_TEXT] -
+					   ldr->sects[LLEXT_MEM_TEXT].sh_offset;
+			}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 			rel_addr += rela.r_offset + tgt->sh_offset;
 		} else {
 			/* Shared / dynamically linked ELF */
@@ -363,6 +370,17 @@ static int llext_link_plt(struct llext_loader *ldr, struct llext *ext, elf_shdr_
 					(size_t)rela.r_offset);
 				continue;
 			}
+
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+			/* Relocation needs to land in the heap where the TEXT region is now */
+			ssize_t text_offset =
+				(ssize_t)ext->text_in_elf - (ssize_t)llext_peek(ldr, 0);
+			if (offset >= text_offset &&
+			    offset < text_offset + ext->mem_size[LLEXT_MEM_TEXT]) {
+				rel_addr = (uint8_t *)ext->mem[LLEXT_MEM_TEXT] -
+					   ldr->sects[LLEXT_MEM_TEXT].sh_offset;
+			}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
 
 			rel_addr += offset;
 		}
@@ -533,7 +551,7 @@ int llext_link(struct llext_loader *ldr, struct llext *ext, const struct llext_l
 				return ret;
 			}
 
-			ret = llext_read(ldr, &rel, shdr->sh_entsize);
+			ret = llext_read(ldr, ext, &rel, shdr->sh_entsize);
 			if (ret != 0) {
 				return ret;
 			}

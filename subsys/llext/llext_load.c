@@ -71,7 +71,7 @@ static int llext_load_elf_data(struct llext_loader *ldr, struct llext *ext)
 		return ret;
 	}
 
-	ret = llext_read(ldr, &ldr->hdr, sizeof(ldr->hdr));
+	ret = llext_read(ldr, ext, &ldr->hdr, sizeof(ldr->hdr));
 	if (ret != 0) {
 		LOG_ERR("Failed to read ELF header");
 		return ret;
@@ -142,7 +142,7 @@ static int llext_load_elf_data(struct llext_loader *ldr, struct llext *ext)
 			return ret;
 		}
 
-		ret = llext_read(ldr, ext->sect_hdrs, sect_hdrs_sz);
+		ret = llext_read(ldr, ext, ext->sect_hdrs, sect_hdrs_sz);
 		if (ret != 0) {
 			LOG_ERR("Failed to read section headers");
 			return ret;
@@ -600,7 +600,7 @@ static int llext_count_export_syms(struct llext_loader *ldr, struct llext *ext)
 			return ret;
 		}
 
-		ret = llext_read(ldr, &sym, ent_size);
+		ret = llext_read(ldr, ext, &sym, ent_size);
 		if (ret != 0) {
 			return ret;
 		}
@@ -783,7 +783,7 @@ static int llext_copy_symbols(struct llext_loader *ldr, struct llext *ext,
 			return ret;
 		}
 
-		ret = llext_read(ldr, &sym, ent_size);
+		ret = llext_read(ldr, ext, &sym, ent_size);
 		if (ret != 0) {
 			return ret;
 		}

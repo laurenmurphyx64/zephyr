@@ -429,7 +429,7 @@ int arch_elf_veneer_init(struct llext_loader *ldr, struct llext *ext)
 			elf_sym_t sym;
 
 			if (llext_seek(ldr, shdr->sh_offset + j * shdr->sh_entsize) ||
-			    llext_read(ldr, &rel, sizeof(rel))) {
+			    llext_read(ldr, ext, &rel, sizeof(rel))) {
 				continue;
 			}
 

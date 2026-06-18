@@ -99,7 +99,7 @@ struct llext_loader {
 	 *
 	 * @returns 0 on success, or a negative error code.
 	 */
-	int (*read)(struct llext_loader *ldr, void *out, size_t len);
+	int (*read)(struct llext_loader *ldr, struct llext *ext, void *out, size_t len);
 
 	/**
 	 * @brief Function to seek to a new absolute location in the stream.
@@ -155,9 +155,9 @@ static inline int llext_prepare(struct llext_loader *l)
 	return 0;
 }
 
-static inline int llext_read(struct llext_loader *l, void *buf, size_t len)
+static inline int llext_read(struct llext_loader *l, struct llext *ext, void *buf, size_t len)
 {
-	return l->read(l, buf, len);
+	return l->read(l, ext, buf, len);
 }
 
 static inline int llext_seek(struct llext_loader *l, size_t pos)

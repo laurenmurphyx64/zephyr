@@ -38,7 +38,7 @@ struct llext_fs_loader {
 
 /** @cond ignore */
 int llext_fs_prepare(struct llext_loader *ldr);
-int llext_fs_read(struct llext_loader *ldr, void *buf, size_t len);
+int llext_fs_read(struct llext_loader *ldr, struct llext *ext, void *buf, size_t len);
 int llext_fs_seek(struct llext_loader *ldr, size_t pos);
 void llext_fs_finalize(struct llext_loader *ldr);
 /** @endcond */

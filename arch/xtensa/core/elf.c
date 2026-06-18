@@ -8,6 +8,7 @@
 #include <zephyr/llext/llext.h>
 #include <zephyr/llext/llext_internal.h>
 #include <zephyr/llext/loader.h>
+#include <zephyr/arch/common/instr_mem.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
@@ -31,6 +32,85 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 #define R_XTENSA_PLT            6
 #define R_XTENSA_ASM_EXPAND	11
 #define R_XTENSA_SLOT0_OP	20
+
+static void r_xtensa_slot0_op_relocate(struct llext *ext, const elf_rela_t *rel, uint8_t *loc,
+				       ssize_t value)
+{
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+	if (llext_addr_in_text(ext, loc)) {
+		/* Load the 3-byte instruction */
+		uint32_t instruction;
+
+		arch_memcpy_i2d(&instruction, loc, 3);
+
+		/* Extract the bytes for opcode checking */
+		uint8_t byte0 = instruction & 0xff;
+		uint8_t byte1 = (instruction >> 8) & 0xff;
+		uint8_t byte2 = (instruction >> 16) & 0xff;
+
+		/* Check the low opcode and modify the instruction */
+		if ((byte0 & 0xf) == 1 && !byte1 && !byte2) {
+			/* L32R: low nibble is 1 */
+			instruction = (instruction & 0xff0000ffU) | ((value & 0xff) << 8) |
+				      (((value >> 8) & 0xff) << 16);
+		} else if ((byte0 & 0xf) == 5 && !(byte0 & 0xc0) && !byte1 && !byte2) {
+			/* CALLn: low nibble is 5 */
+			instruction = (instruction & 0xff0000c0U) | (byte0 & 0x3f) |
+				      (((value << 6) & 0xc0)) | (((value >> 2) & 0xff) << 8) |
+				      (((value >> 10) & 0xff) << 16);
+		} else {
+			LOG_DBG("%p: unhandled OPC or no relocation %02x%02x%02x inf %#x offs %#x",
+				(void *)loc, byte2, byte1, byte0, rel->r_info, rel->r_offset);
+			return;
+		}
+
+		/* Write back the modified instruction */
+		arch_memcpy_d2i(loc, &instruction, 3);
+		return;
+	}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
+
+	/* Check the opcode */
+	if ((loc[0] & 0xf) == 1 && !loc[1] && !loc[2]) {
+		/* L32R: low nibble is 1 */
+		loc[1] = value & 0xff;
+		loc[2] = (value >> 8) & 0xff;
+	} else if ((loc[0] & 0xf) == 5 && !(loc[0] & 0xc0) && !loc[1] && !loc[2]) {
+		/* CALLn: low nibble is 5 */
+		loc[0] = (loc[0] & 0x3f) | ((value << 6) & 0xc0);
+		loc[1] = (value >> 2) & 0xff;
+		loc[2] = (value >> 10) & 0xff;
+	} else {
+		LOG_DBG("%p: unhandled OPC or no relocation %02x%02x%02x inf %#x offs %#x",
+			(void *)loc, loc[2], loc[1], loc[0], rel->r_info, rel->r_offset);
+	}
+}
+
+static uintptr_t read_got_entry(struct llext *ext, elf_word *got_entry)
+{
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+	if (llext_addr_in_text(ext, (uint8_t *)got_entry)) {
+		uintptr_t value;
+
+		arch_memcpy_i2d(&value, got_entry, sizeof(value));
+		return value;
+	}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
+
+	return *got_entry;
+}
+
+static void update_got_entry(struct llext *ext, elf_word *got_entry, uintptr_t addr)
+{
+#ifdef CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM
+	if (llext_addr_in_text(ext, (uint8_t *)got_entry)) {
+		arch_memcpy_d2i(got_entry, &addr, sizeof(addr));
+		return;
+	}
+#endif /* CONFIG_ARCH_HAS_WORD_GRANULAR_INSTR_MEM */
+
+	*got_entry = addr;
+}
 
 static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 			       const elf_rela_t *rel, uintptr_t addr,
@@ -62,18 +142,20 @@ static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 			return -ENOENT;
 		}
 
-		*got_entry += (uintptr_t)llext_loaded_sect_ptr(ldr, ext, sh_ndx) -
-			ext->sect_hdrs[sh_ndx].sh_addr;
+		update_got_entry(ext, got_entry,
+				 read_got_entry(ext, got_entry) +
+					 (uintptr_t)llext_loaded_sect_ptr(ldr, ext, sh_ndx) -
+					 ext->sect_hdrs[sh_ndx].sh_addr);
 		break;
 	case R_XTENSA_GLOB_DAT:
 	case R_XTENSA_JMP_SLOT:
 		if (stb == STB_GLOBAL) {
-			*got_entry = addr;
+			update_got_entry(ext, got_entry, addr);
 		}
 		break;
 	case R_XTENSA_32:
 		/* Used for both LOCAL and GLOBAL bindings */
-		*got_entry += addr;
+		update_got_entry(ext, got_entry, read_got_entry(ext, got_entry) + addr);
 		break;
 	case R_XTENSA_SLOT0_OP:
 		/* Apparently only actionable with LOCAL bindings */
@@ -83,7 +165,7 @@ static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 				     ELF_R_SYM(rel->r_info) * sizeof(elf_sym_t));
 
 		if (!ret) {
-			ret = llext_read(ldr, &rsym, sizeof(elf_sym_t));
+			ret = llext_read(ldr, ext, &rsym, sizeof(elf_sym_t));
 		}
 		if (ret) {
 			LOG_ERR("Failed to read a symbol table entry, LLEXT linking might fail.");
@@ -100,22 +182,7 @@ static int xtensa_elf_relocate(struct llext_loader *ldr, struct llext *ext,
 			rsym.st_value + rel->r_addend;
 		ssize_t value = (link_addr - (((uintptr_t)got_entry + 3) & ~3)) >> 2;
 
-		/* Check the opcode */
-		if ((loc[0] & 0xf) == 1 && !loc[1] && !loc[2]) {
-			/* L32R: low nibble is 1 */
-			loc[1] = value & 0xff;
-			loc[2] = (value >> 8) & 0xff;
-		} else if ((loc[0] & 0xf) == 5 && !(loc[0] & 0xc0) && !loc[1] && !loc[2]) {
-			/* CALLn: low nibble is 5 */
-			loc[0] = (loc[0] & 0x3f) | ((value << 6) & 0xc0);
-			loc[1] = (value >> 2) & 0xff;
-			loc[2] = (value >> 10) & 0xff;
-		} else {
-			LOG_DBG("%p: unhandled OPC or no relocation %02x%02x%02x inf %#x offs %#x",
-				(void *)loc, loc[2], loc[1], loc[0],
-				rel->r_info, rel->r_offset);
-			break;
-		}
+		r_xtensa_slot0_op_relocate(ext, rel, loc, value);
 
 		break;
 	case R_XTENSA_ASM_EXPAND:
