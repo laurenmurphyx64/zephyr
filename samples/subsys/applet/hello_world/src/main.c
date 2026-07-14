@@ -24,10 +24,14 @@
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
+#ifdef CONFIG_LLEXT
 /* The extension binary is embedded as a C array by the build system. */
 static const uint8_t hello_world_elf[] __aligned(4096) = {
 #include <hello_world.inc>
 };
+#else
+extern void applet_main(void *arg);
+#endif /* CONFIG_LLEXT */
 
 /* Stack for the applet thread */
 Z_APPLET_THREAD_STACK_DEFINE(hello_world_stack, CONFIG_APPLET_THREAD_STACK_SIZE_DEFAULT);
@@ -50,16 +54,39 @@ int main(void)
 	/*
 	 * Load and start the applet in one call.
 	 * The extension runs in user mode (hardware-isolated) when
-	 * CONFIG_USERSPACE is enabled.
+	 * userspace is enabled.
 	 */
-	int ret = z_applet_spawn(&hello_world_applet, "hello world",
-				  hello_world_elf, sizeof(hello_world_elf),
-				  hello_world_stack, sizeof(hello_world_stack),
-				  &opts);
+	int ret;
+#ifdef CONFIG_LLEXT
+	ret = z_applet_spawn(&hello_world_applet, "hello world llext",
+			     hello_world_elf, sizeof(hello_world_elf),
+			     hello_world_stack, sizeof(hello_world_stack),
+			     &opts);
 	if (ret != 0) {
 		LOG_ERR("z_applet_spawn failed: %d", ret);
 		return ret;
 	}
+#else
+	ret = z_applet_init(&hello_world_applet, "hello world native", &opts);
+	if (ret != 0) {
+		LOG_ERR("z_applet_init failed: %d", ret);
+		return ret;
+	}
+
+	ret = z_applet_add_thread(&hello_world_applet, hello_world_stack,
+			    sizeof(hello_world_stack), applet_main,
+			    opts.arg, NULL);
+	if (ret != 0) {
+		LOG_ERR("z_applet_add_thread failed: %d", ret);
+		return ret;
+	}
+
+	ret = z_applet_start(&hello_world_applet);
+	if (ret != 0) {
+		LOG_ERR("z_applet_start failed: %d", ret);
+		return ret;
+	}
+#endif
 
 	/* Wait for the applet to finish */
 	ret = z_applet_join(&hello_world_applet, K_SECONDS(5));

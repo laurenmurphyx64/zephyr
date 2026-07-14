@@ -28,3 +28,12 @@ tests:
       type: one_line
       regex:
         - "Hello world from applet 'hello world' \\(arg=42\\)"
+  sample.applet.hello_world.llext:
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "Hello world from applet 'hello world' \\(arg=42\\)"
+    extra_configs:
+      - CONFIG_LLEXT=y
+      - CONFIG_LLEXT_HEAP_SIZE=64

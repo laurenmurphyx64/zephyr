@@ -15,7 +15,7 @@ menuconfig APPLET
 	    - Use memory domains for per-applet hardware memory isolation
 	      (requires CONFIG_USERSPACE)
 		- Let each thread access memory on other threads' stacks
-		  (requires CONFIG_APPLET_THREAD_STACK_SHARING)
+		  (requires CONFIG_APPLET_THREAD_MUTUAL_STACK_ACCESS)
 	    - Run all of its threads in unprivileged mode
 
 if APPLET
