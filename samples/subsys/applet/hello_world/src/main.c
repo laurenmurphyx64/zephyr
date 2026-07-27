@@ -74,7 +74,7 @@ int main(void)
 	}
 
 	ret = z_applet_add_thread(&hello_world_applet, hello_world_stack,
-			    sizeof(hello_world_stack), applet_main,
+			    sizeof(hello_world_stack), (k_thread_entry_t) applet_main,
 			    opts.arg, NULL);
 	if (ret != 0) {
 		LOG_ERR("z_applet_add_thread failed: %d", ret);

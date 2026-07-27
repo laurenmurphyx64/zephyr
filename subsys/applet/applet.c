@@ -25,10 +25,6 @@
 
 LOG_MODULE_REGISTER(applet, CONFIG_APPLET_LOG_LEVEL);
 
-/* -------------------------------------------------------------------------
- * Per-thread slot allocator (private k_heap)
- * -----------------------------------------------------------------------*/
-
 K_HEAP_DEFINE(applet_slot_heap, CONFIG_APPLET_HEAP_SIZE);
 
 static struct z_applet_thread *slot_alloc(void)
@@ -68,10 +64,6 @@ static void slot_free(struct z_applet_thread *slot)
 	k_heap_free(&applet_slot_heap, slot);
 }
 
-/* -------------------------------------------------------------------------
- * Global applet registry (used by the fatal handler)
- * -----------------------------------------------------------------------*/
-
 static sys_slist_t applet_list = SYS_SLIST_STATIC_INIT(&applet_list);
 static struct k_spinlock applet_list_lock;
 
@@ -90,10 +82,6 @@ static void applet_unregister(struct z_applet *applet)
 	(void)sys_slist_find_and_remove(&applet_list, &applet->reg_node);
 	k_spin_unlock(&applet_list_lock, key);
 }
-
-/* -------------------------------------------------------------------------
- * Internal helpers
- * -----------------------------------------------------------------------*/
 
 static void apply_default_opts(struct z_applet_opts *o)
 {
@@ -141,10 +129,6 @@ static int init_descriptor(struct z_applet *applet, const char *name,
 	applet_register(applet);
 	return 0;
 }
-
-/* -------------------------------------------------------------------------
- * Public API — construction
- * -----------------------------------------------------------------------*/
 
 int z_applet_init(struct z_applet *applet, const char *name,
 		   const struct z_applet_opts *opts)
@@ -249,10 +233,6 @@ int z_applet_add_partition(struct z_applet *applet,
 #endif
 }
 
-/* -------------------------------------------------------------------------
- * Public API — thread attachment
- * -----------------------------------------------------------------------*/
-
 static int add_thread_internal(struct z_applet *applet,
 			       k_thread_stack_t *stack, size_t stack_size,
 			       k_thread_entry_t entry, void *arg,
@@ -298,9 +278,16 @@ static int add_thread_internal(struct z_applet *applet,
 			slot->entry_fn, slot->arg, NULL, NULL,
 			slot->priority, opts_flags, K_FOREVER);
 #endif
+
 	LOG_DBG("applet '%s': added thread %p (entry=%p, arg=%p, stack=%p, size=%zu)",
 		applet->name, slot->thread, slot->entry_fn, slot->arg,
 		slot->stack, slot->stack_size);
+
+#ifdef CONFIG_SMP
+	k_thread_cpu_pin(slot->thread, applet->opts.cpu);
+	LOG_DBG("applet '%s': thread %p pinned to CPU %d",
+		applet->name, slot->thread, applet->opts.cpu);
+#endif
 
 	k_thread_name_set(slot->thread,
 			  thread_name != NULL ? thread_name : applet->name);
@@ -349,10 +336,6 @@ int z_applet_add_thread_sym(struct z_applet *applet,
 				   (k_thread_entry_t)fn, arg, thread_name);
 }
 #endif /* CONFIG_APPLET_LLEXT */
-
-/* -------------------------------------------------------------------------
- * Public API — execution control
- * -----------------------------------------------------------------------*/
 
 int z_applet_start(struct z_applet *applet)
 {
@@ -560,10 +543,6 @@ void z_applet_unload(struct z_applet *applet)
 	applet->state = Z_APPLET_STATE_UNLOADED;
 }
 
-/* -------------------------------------------------------------------------
- * Introspection
- * -----------------------------------------------------------------------*/
-
 struct k_thread *z_applet_thread_get(struct z_applet *applet, unsigned int idx)
 {
 	if (applet == NULL) {
@@ -581,10 +560,6 @@ struct k_thread *z_applet_thread_get(struct z_applet *applet, unsigned int idx)
 	}
 	return NULL;
 }
-
-/* -------------------------------------------------------------------------
- * Fatal handler
- * -----------------------------------------------------------------------*/
 
 #ifdef CONFIG_APPLET_FATAL_HANDLER
 

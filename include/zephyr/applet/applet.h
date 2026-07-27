@@ -107,6 +107,9 @@ struct z_applet_opts {
 	/** Default scheduling priority for threads of this applet. */
 	int thread_priority;
 
+	/** CPU to pin all threads of this applet to */
+	int cpu;
+
 	/**
 	 * Run the applet threads in unprivileged (user) mode.
 	 * Requires both @kconfig{CONFIG_USERSPACE} and an applet memory
@@ -151,6 +154,7 @@ struct z_applet_opts {
 	{                                                                      \
 		.thread_stack_size = 0,                                            \
 		.thread_priority   = CONFIG_APPLET_THREAD_PRIORITY_DEFAULT,              \
+		.cpu = 0,                                                         \
 		.user_mode     = IS_ENABLED(CONFIG_USERSPACE),                 \
 		.share_stacks  = true,                                         \
 		.halt_on_fault = false,                                        \

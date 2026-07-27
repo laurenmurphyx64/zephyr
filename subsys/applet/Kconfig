@@ -4,6 +4,7 @@
 menuconfig APPLET
 	bool "Zephyr Applet"
 	select THREAD_NAME
+	select SCHED_CPU_MASK if SMP
 	select DYNAMIC_OBJECTS if USERSPACE
 	help
 	  Enable the Zephyr applet subsystem.
