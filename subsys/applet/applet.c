@@ -183,7 +183,7 @@ int applet_load_ext(struct applet *applet_inst, const char *name,
 	}
 
 #ifdef Z_LIBC_PARTITION_EXISTS
-	z_applet_add_partition(applet_inst, &z_libc_partition);
+	applet_add_partition(applet_inst, &z_libc_partition);
 #endif
 
 #ifdef CONFIG_USERSPACE

@@ -1,10 +1,10 @@
 sample:
   name: Applet - Hello World
   description: >
-    Demonstrates loading and running a dynamically-loaded ELF applet using
-    the Zephyr Applet subsystem. The loadable extension runs in an
-    isolated memory domain (and in user mode when CONFIG_USERSPACE is enabled)
-    without any knowledge of LLEXT, memory domains, or userspace internals.
+    Demonstrates loading and running a dynamically-loaded ELF (or native)
+    applet using the applet subsystem. The applet runs in an isolated memory domain
+    (and in user mode when CONFIG_USERSPACE is enabled) without any knowledge of LLEXT,
+    memory domains, or userspace internals.
 
 common:
   tags:
@@ -19,10 +19,11 @@ common:
     - qemu_cortex_r5
     - mps2/an385
     - mps2/an521/cpu0
-    - native_sim
 
 tests:
   sample.applet.hello_world:
+    integration_platforms:
+      - native_sim
     harness: console
     harness_config:
       type: one_line
