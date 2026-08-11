@@ -21,15 +21,13 @@
  *    into the main Zephyr image. No ELF loading and no LLEXT is involved.
  *    When @kconfig{CONFIG_USERSPACE} is enabled, a dedicated
  *    @c k_mem_domain is still created so the applet's threads can share
- *    their stacks (and any partitions added via
- *    @ref applet_add_partition) with each other while remaining
+ *    the partitions added via @ref applet_add_partition while remaining
  *    isolated from the rest of the system.
  *
  *  - **LLEXT-backed** — code is loaded at runtime from an ELF binary via
  *    the @ref llext API. The extension's TEXT/DATA/RODATA/BSS regions are
- *    added to the applet's memory domain in addition to any per-thread
- *    stack partitions, so the applet is hardware-isolated from the rest
- *    of the system.
+ *    added to the applet's memory domain, so the applet is
+ *    hardware-isolated from the rest of the system.
  *
  * The number of threads per applet is not statically bounded — threads
  * are tracked in a linked list with per-slot heap allocations. The size
@@ -121,16 +119,6 @@ struct applet_opts {
 	bool user_mode;
 
 	/**
-	 * Publish each thread's stack as a memory partition in the applet
-	 * domain so the applet's threads can read/write each other's
-	 * stacks. Only meaningful when @kconfig{CONFIG_USERSPACE} is on
-	 * (without it all kernel threads share the same address space
-	 * anyway).
-	 * Default: @c true.
-	 */
-	bool share_stacks;
-
-	/**
 	 * If @c true and @kconfig{CONFIG_APPLET_FATAL_HANDLER} is enabled,
 	 * halt the whole system when any thread of this applet triggers a
 	 * fatal error. Otherwise the offending thread is simply aborted.
@@ -156,7 +144,6 @@ struct applet_opts {
 		.thread_priority   = CONFIG_APPLET_THREAD_PRIORITY_DEFAULT,              \
 		.cpu = 0,                                                         \
 		.user_mode     = IS_ENABLED(CONFIG_USERSPACE),                 \
-		.share_stacks  = true,                                         \
 		.halt_on_fault = false,                                        \
 		.entry_sym     = APPLET_ENTRY_SYM,                          \
 		.arg           = NULL,                                         \
@@ -179,10 +166,6 @@ struct applet_thread {
 	int priority;
 	bool started;
 	bool joined;
-#ifdef CONFIG_USERSPACE
-	struct k_mem_partition stack_part;
-	bool stack_part_added;
-#endif
 };
 
 /** @endcond */
@@ -203,7 +186,6 @@ struct applet {
 #ifdef CONFIG_USERSPACE
 	struct k_mem_domain domain;
 	bool has_domain;
-	struct k_mem_partition slot_stack_part;
 #endif
 
 	sys_slist_t threads;
@@ -227,8 +209,7 @@ struct applet {
  * @brief Initialise a native applet descriptor.
  *
  * When @kconfig{CONFIG_USERSPACE} is enabled, a fresh (empty)
- * @c k_mem_domain is created so subsequently-added threads can access each
- * other's stacks (when @c opts.share_stacks is true) and arbitrary
+ * @c k_mem_domain is created so subsequently-added threads can access the
  * partitions added via @ref applet_add_partition.
  *
  * @param applet_inst  Descriptor to initialise (zeroed by the call)

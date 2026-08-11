@@ -372,21 +372,6 @@ int applet_start(struct applet *applet_inst)
 
 #ifdef CONFIG_USERSPACE
 		if (applet_inst->has_domain) {
-			if (applet_inst->opts.share_stacks && !slot->stack_part_added) {
-				slot->stack_part.start = (uintptr_t)
-					K_THREAD_STACK_BUFFER(slot->stack);
-				slot->stack_part.size = slot->stack_size;
-				slot->stack_part.attr = K_MEM_PARTITION_P_RW_U_RW;
-				int pret = applet_add_partition(
-					applet_inst, &slot->stack_part);
-				if (pret == 0) {
-					slot->stack_part_added = true;
-				} else {
-					LOG_WRN("applet '%s': add stack partition "
-						"failed (%d)",
-						applet_inst->name, pret);
-				}
-			}
 			k_mem_domain_add_thread(&applet_inst->domain, slot->thread);
 		}
 #endif
@@ -603,7 +588,6 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 				applet_inst->name, reason, (void *)cur);
 			applet_kill(applet_inst);
 			CODE_UNREACHABLE;
-		
 		} else if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_THREAD) {
 			LOG_PANIC();
 			LOG_ERR("applet '%s': fatal error %u in thread %p; "

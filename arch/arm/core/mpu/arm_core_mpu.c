@@ -272,39 +272,16 @@ void z_arm_configure_dynamic_mpu_regions(struct k_thread *thread)
 	LOG_DBG("configure user thread %p's context", thread);
 	if (thread->arch.priv_stack_start) {
 		/* K_USER thread stack needs a region */
-		uintptr_t base = (uintptr_t)thread->stack_obj;
-		size_t size = thread->stack_info.size +
-			(thread->stack_info.start - base);
-		bool covered_by_partition = false;
+		__ASSERT(region_num < _MAX_DYNAMIC_MPU_REGIONS_NUM,
+			"Out-of-bounds error for dynamic region map.");
 
-#if defined(CONFIG_MPU_REQUIRES_NON_OVERLAPPING_REGIONS)
-		/*
-		 * A memory domain partition may already span this exact
-		 * stack range (e.g. a thread's own stack published as a
-		 * shared partition). Skip the duplicate region: MPUs that
-		 * require non-overlapping regions fail to program the
-		 * dynamic regions when handed two entries for the same
-		 * address range.
-		 */
-		for (int i = 0; i < region_num; i++) {
-			if (dynamic_regions[i].start == base &&
-			    dynamic_regions[i].size == size) {
-				covered_by_partition = true;
-				break;
-			}
-		}
-#endif /* CONFIG_MPU_REQUIRES_NON_OVERLAPPING_REGIONS */
+		dynamic_regions[region_num].start = (uintptr_t)thread->stack_obj;
+		dynamic_regions[region_num].size =
+			thread->stack_info.size +
+			(thread->stack_info.start - dynamic_regions[region_num].start);
+		dynamic_regions[region_num].attr = K_MEM_PARTITION_P_RW_U_RW;
 
-		if (!covered_by_partition) {
-			__ASSERT(region_num < _MAX_DYNAMIC_MPU_REGIONS_NUM,
-				"Out-of-bounds error for dynamic region map.");
-
-			dynamic_regions[region_num].start = base;
-			dynamic_regions[region_num].size = size;
-			dynamic_regions[region_num].attr = K_MEM_PARTITION_P_RW_U_RW;
-
-			region_num++;
-		}
+		region_num++;
 	}
 #endif /* CONFIG_USERSPACE */
 
