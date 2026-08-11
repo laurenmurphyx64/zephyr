@@ -127,6 +127,12 @@ static int init_descriptor(struct applet *applet_inst, const char *name,
 
 	applet_inst->state = APPLET_STATE_LOADED;
 	applet_register(applet_inst);
+
+#if defined(CONFIG_USERSPACE) && defined(Z_LIBC_PARTITION_EXISTS)
+	/* User-mode threads of any kind need this for errno/TLS/malloc state. */
+	applet_add_partition(applet_inst, &z_libc_partition);
+#endif
+
 	return 0;
 }
 
@@ -181,10 +187,6 @@ int applet_load_ext(struct applet *applet_inst, const char *name,
 		LOG_ERR("applet '%s': llext_load failed (%d)", applet_inst->name, ret);
 		goto err;
 	}
-
-#ifdef Z_LIBC_PARTITION_EXISTS
-	applet_add_partition(applet_inst, &z_libc_partition);
-#endif
 
 #ifdef CONFIG_USERSPACE
 	ret = llext_add_domain(applet_inst->ext, &applet_inst->domain);
@@ -587,18 +589,30 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 	struct applet *applet_inst = find_applet_of_thread(cur);
 
 	if (applet_inst != NULL) {
-		if (applet_inst->opts.halt_on_fault) {
+		if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_SYSTEM) {
 			LOG_PANIC();
 			LOG_ERR("applet '%s': fatal error %u in thread %p; "
 				"halting system",
 				applet_inst->name, reason, (void *)cur);
 			k_fatal_halt(reason);
 			CODE_UNREACHABLE;
+		} else if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_APPLET) {
+			LOG_PANIC();
+			LOG_ERR("applet '%s': fatal error %u in thread %p; "
+				"aborting all threads in applet",
+				applet_inst->name, reason, (void *)cur);
+			applet_kill(applet_inst);
+			CODE_UNREACHABLE;
+		
+		} else if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_THREAD) {
+			LOG_PANIC();
+			LOG_ERR("applet '%s': fatal error %u in thread %p; "
+				"aborting thread",
+				applet_inst->name, reason, (void *)cur);
+			k_thread_abort(cur);
+			CODE_UNREACHABLE;
 		}
 
-		LOG_ERR("applet '%s': fatal error %u in thread %p; "
-			"aborting thread",
-			applet_inst->name, reason, (void *)cur);
 		return;
 	}
 

@@ -13,7 +13,7 @@ if(CONFIG_LLEXT)
   set(applet_bin  ${PROJECT_BINARY_DIR}/llext/hello_world.llext)
   set(applet_inc  ${ZEPHYR_BINARY_DIR}/include/generated/hello_world.inc)
 
-  add_llapplet_target(hello_world_ext
+  add_llext_target(hello_world_ext
     OUTPUT  ${applet_bin}
     SOURCES ${applet_src}
   )

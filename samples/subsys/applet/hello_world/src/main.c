@@ -59,7 +59,7 @@ int main(void)
 #ifdef CONFIG_LLEXT
 	ret = applet_spawn(&hello_world_applet, "hello world llext",
 			     hello_world_elf, sizeof(hello_world_elf),
-			     hello_world_stack, sizeof(hello_world_stack),
+			     hello_world_stack, K_THREAD_STACK_SIZEOF(hello_world_stack),
 			     &opts);
 	if (ret != 0) {
 		LOG_ERR("applet_spawn failed: %d", ret);
@@ -73,7 +73,7 @@ int main(void)
 	}
 
 	ret = applet_add_thread(&hello_world_applet, hello_world_stack,
-			    sizeof(hello_world_stack), (k_thread_entry_t) applet_main,
+			    K_THREAD_STACK_SIZEOF(hello_world_stack), (k_thread_entry_t) applet_main,
 			    opts.arg, NULL);
 	if (ret != 0) {
 		LOG_ERR("applet_add_thread failed: %d", ret);

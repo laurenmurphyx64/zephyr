@@ -7,20 +7,16 @@
 #include <zephyr/kernel.h>
 #include <zephyr/llext/symbol.h>
 #include <zephyr/arch/cpu.h>
+#include <zephyr/ztest_assert.h>
 
 /**
- * @brief Extension entry point
- *
- * Called by the applet subsystem after the extension is loaded and its
- * initialisation functions (.init_array) have run.
- *
- * @param arg  Opaque argument forwarded from z_applet_opts.arg; the host
- *             application passes the integer 42 cast to void*.
+ * @param arg  Opaque argument forwarded from z_applet_opts.arg; the main application
+ *             passes the CPU number the applet should run on.
  */
-void applet_main(void *arg)
+void cpu_pinning_main(void *arg)
 {
 	unsigned int cpu = arch_curr_cpu()->id;
-	printk("applet main thread %p on CPU %u\n", k_current_get(), cpu);
+	zassert_equal(cpu, (unsigned int)(uintptr_t) arg, "applet main running on wrong CPU %u, expected %u", cpu, (unsigned int)(uintptr_t) arg);
 }
 
-LL_EXTENSION_SYMBOL(applet_main);
+LL_EXTENSION_SYMBOL(cpu_pinning_main);
