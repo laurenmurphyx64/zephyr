@@ -45,26 +45,49 @@ The following command will build the main shell application:
    the full list of similar flags in
    :zephyr_file:`tests/subsys/llext/no_mem_protection.conf`.
 
-This sample also includes the source for a very basic applet extension,
-:zephyr_file:`samples/subsys/applet/shell_loader/hello_world.c`, which can be
-used to test the applet features.
+This sample also includes the source for three applet extensions, which can be
+used to exercise the applet features:
 
-It can be compiled to :file:`build/hello_world.llext` using the Zephyr build
-system like this:
+* :zephyr_file:`samples/subsys/applet/shell_loader/hello_world.c` prints a
+  single line and returns.
+* :zephyr_file:`samples/subsys/applet/shell_loader/ping.c` is a two-thread
+  applet: one thread produces samples, the other one sums them and hands the
+  running total over to a peer applet.
+* :zephyr_file:`samples/subsys/applet/shell_loader/pong.c` is a service applet
+  that never returns: it folds its own seed into every value ``ping`` hands
+  over, and has to be killed to stop.
+
+They are built alongside the application, and can also be rebuilt on their own:
 
 .. code-block:: console
 
-   $ ninja -C build -vvv hello_world_ext
+   $ ninja -C build hello_world_ext ping_ext pong_ext
 
-On a host machine with the Zephyr SDK and the matching toolchain in ``PATH``,
-the same object can also be produced directly. Pick the toolchain prefix that
-matches your target, for example ``arm-zephyr-eabi-`` for ARM,
-``xtensa-<soc>_zephyr-elf-`` for Xtensa or ``riscv64-zephyr-elf-`` for
-RISC-V:
+The resulting :file:`build/hello_world.llext`, :file:`build/ping.llext` and
+:file:`build/pong.llext` are the objects loaded by the shell.
+
+``hello_world.c`` is self-contained, so on a host machine with the Zephyr SDK
+and the matching toolchain in ``PATH`` it can also be produced directly. Pick
+the toolchain prefix that matches your target, for example
+``arm-zephyr-eabi-`` for ARM, ``xtensa-<soc>_zephyr-elf-`` for Xtensa or
+``riscv64-zephyr-elf-`` for RISC-V:
 
 .. code-block:: console
 
    $ <toolchain-prefix>gcc -mlong-calls -c -o build/hello_world.llext samples/subsys/applet/shell_loader/hello_world.c
+
+``ping.c`` and ``pong.c`` include :zephyr_file:`include/zephyr/kernel.h` and
+the sample's own :zephyr_file:`samples/subsys/applet/shell_loader/applet_link.h`,
+so they must be built through the Zephyr build system (or the
+:ref:`LLEXT EDK <llext_build_edk>`) to pick up the right include paths.
+
+.. note::
+
+   LLEXT targets do not inherit the optimization level of the main image. The
+   sample therefore passes an explicit ``-Os`` to them: without it,
+   :c:func:`k_msleep` keeps a call to the 64-bit division helper of libgcc,
+   which is not part of the kernel's exported symbol table and makes the load
+   fail with ``Undefined symbol with no entry in symbol table``.
 
 .. note::
 
@@ -107,29 +130,38 @@ and can be seen with ``applet help``:
   uart:~$ applet help
   applet - Applet commands
   Subcommands:
-    list      :List loaded applets, their state and thread count
-    load_hex  :Load an elf file encoded in hex directly from the shell input.
-               Syntax:
-               <applet_name> <ext_hex_string>
-    start     :Start a loaded applet, running its applet_main() entry point.
-               Syntax:
-               <applet_name>
-    join      :Wait for every thread of an applet to finish.
-               Syntax:
-               <applet_name> [timeout_ms]
-    kill      :Abort every running thread of an applet.
-               Syntax:
-               <applet_name>
-    unload    :Unload an applet and release its ELF buffer.
-               Syntax:
-               <applet_name>
+    list        :List loaded applets, their state and thread count
+    load_hex    :Load an elf file encoded in hex directly from the shell input.
+                 The seed is handed to every thread of the applet as its
+                 argument.
+                 Syntax:
+                 <applet_name> <ext_hex_string> [seed]
+    add_thread  :Give a loaded applet an extra thread running an exported symbol
+                 of its extension. Threads of the same applet share its memory
+                 domain.
+                 Syntax:
+                 <applet_name> <symbol>
+    start       :Start a loaded applet, running its applet_main() entry point.
+                 Syntax:
+                 <applet_name>
+    join        :Wait for every thread of an applet to finish.
+                 Syntax:
+                 <applet_name> [timeout_ms]
+    kill        :Abort every running thread of an applet.
+                 Syntax:
+                 <applet_name>
+    unload      :Unload an applet and release its ELF buffer.
+                 Syntax:
+                 <applet_name>
 
-The hex string generated above can be used to load the extension as an applet:
+The hex string generated above can be used to load the extension as an applet.
+The optional third argument is a seed, handed to every thread of the applet as
+its ``void *arg``:
 
 .. code-block:: console
 
-  uart:~$ applet load_hex hello_world <hex>
-  Successfully loaded applet hello_world (880 bytes)
+  uart:~$ applet load_hex hello <hex> 42
+  Successfully loaded applet hello (852 bytes, seed 42)
 
 Loading an applet does not run any of its code yet: it only loads the ELF and
 attaches a thread to the ``applet_main`` entry point. The applet can then be
@@ -139,35 +171,115 @@ listed, started, waited on, and unloaded:
 
   uart:~$ applet list
   | Name             | State      | Threads |
-  |      hello_world |     loaded |       1 |
-  uart:~$ applet start hello_world
-  hello world from applet (arg=0)
-  Started applet hello_world
-  uart:~$ applet join hello_world
-  Applet hello_world finished with exit code 0
-  uart:~$ applet unload hello_world
-  Unloaded applet hello_world
+  |            hello |     loaded |       1 |
+  uart:~$ applet start hello
+  hello world from applet (arg=0x2a)
+  Started applet hello
+  uart:~$ applet join hello
+  Applet hello finished with exit code 0
+  uart:~$ applet unload hello
+  Unloaded applet hello
 
-An applet that does not terminate on its own can be stopped with
-``applet kill``, which aborts every thread of that applet without touching the
-rest of the system.
+A pair of cooperating applets
+*****************************
+
+``ping`` and ``pong`` show the rest of the applet features: several threads
+inside one applet, two applets running at the same time, joining an applet that
+is still busy, and killing one that never returns.
+
+They exchange values through a small structure the application declares in its
+own memory and exports to the extensions, see
+:zephyr_file:`samples/subsys/applet/shell_loader/applet_link.h`. Under
+:kconfig:option:`CONFIG_USERSPACE` that structure lives in an application
+memory partition which the shell adds to every applet's memory domain with
+:c:func:`applet_add_partition`, so the applets can reach it but not each
+other's private data.
+
+``pong`` is the service side, so start it first. It runs until killed:
+
+.. code-block:: console
+
+  uart:~$ applet load_hex pong <hex> 100
+  Successfully loaded applet pong (1084 bytes, seed 100)
+  uart:~$ applet start pong
+  [pong] folding 100 into every exchange until killed
+  Started applet pong
+
+``ping`` needs a second thread, which has to be added while the applet is still
+in the ``loaded`` state. ``applet_main`` generates pseudo-random samples from
+the seed, and ``ping_sum`` accumulates them and hands the running total to
+``pong``:
+
+.. code-block:: console
+
+  uart:~$ applet load_hex ping <hex> 7
+  Successfully loaded applet ping (1528 bytes, seed 7)
+  uart:~$ applet add_thread ping ping_sum
+  Added thread ping_sum to applet ping
+  uart:~$ applet list
+  | Name             | State      | Threads |
+  |             pong |    running |       1 |
+  |             ping |     loaded |       2 |
+  uart:~$ applet start ping
+  Started applet ping
+  [ping/sum] exchange 1: total 161
+  [ping/sum] exchange 2: total 494
+  [ping/sum] exchange 3: total 750
+
+Joining an applet that is still running returns ``-EAGAIN`` once the timeout
+expires, and leaves the applet untouched. Joining again with a long enough
+timeout waits for both of its threads to return:
+
+.. code-block:: console
+
+  uart:~$ applet join ping 300
+  Applet ping did not finish, return code -11
+  uart:~$ applet join ping 5000
+  [ping/gen] produced 8 samples
+  [ping/sum] final total 1823
+  Applet ping finished with exit code 0
+
+``pong`` never returns on its own, so joining it would block forever. It is
+stopped with ``applet kill``, which aborts every thread of that applet without
+touching the rest of the system:
+
+.. code-block:: console
+
+  uart:~$ applet kill pong
+  Killed applet pong
+  uart:~$ applet list
+  | Name             | State      | Threads |
+  |             pong |       dead |       1 |
+  |             ping |       dead |       2 |
+  uart:~$ applet unload ping
+  Unloaded applet ping
+  uart:~$ applet unload pong
+  Unloaded applet pong
+
+The totals above are reproducible: they only depend on the two seeds. Loading
+the same pair with different seeds produces a different sequence.
+
+The number of extra threads an applet can be given is limited by
+``APPLET_SHELL_MAX_THREADS`` in
+:zephyr_file:`samples/subsys/applet/shell_loader/src/main.c` (two by default),
+which sizes the statically allocated stack array.
 
 Loading multiple applets
 ************************
 
-Each ``load_hex`` invocation allocates its own ELF buffer and stack slot, and
-tracks them under the applet name. Both are released when ``unload`` is called
-for that name, so several applets can stay loaded and run independently:
+Each ``load_hex`` invocation allocates its own ELF buffer and stack slots, and
+tracks them under the applet name. All of them are released when ``unload`` is
+called for that name, so several applets can stay loaded and run independently:
 
 .. code-block:: console
 
-  uart:~$ applet load_hex hello_world <hex>
+  uart:~$ applet load_hex hello <hex>
   uart:~$ applet load_hex worker <hex>
   uart:~$ applet list
   | Name             | State      | Threads |
-  |      hello_world |     loaded |       1 |
+  |            hello |     loaded |       1 |
   |           worker |     loaded |       1 |
-  uart:~$ applet start hello_world
+  uart:~$ applet start hello
   uart:~$ applet start worker
   uart:~$ applet unload worker
 
@@ -184,3 +296,32 @@ each applet in its own memory domain and runs its threads unprivileged, so a
 misbehaving applet cannot corrupt the kernel or other applets. This requires a
 target with hardware memory protection, which is disabled in this sample's
 default configuration to keep the hex loading workflow simple.
+
+The whole walkthrough above also works in user mode. Build it with:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/subsys/applet/shell_loader
+   :board: mps2/an385
+   :goals: build
+   :gen-args: -DCONFIG_USERSPACE=y
+   :compact:
+
+Nothing changes in the extensions themselves: they keep calling
+:c:func:`printk` and :c:func:`k_sleep`, which the kernel turns into system
+calls when the caller is unprivileged.
+
+.. note::
+
+   On MPU based targets the number of partitions a memory domain can hold is
+   bounded by the number of hardware regions left after the static ones, which
+   on the Cortex-M platforms used here leaves very little headroom. An applet
+   needs one partition per section of its extension, plus the C library
+   partition added by the applet subsystem, plus the shared one this sample
+   adds. Adding more partitions to ``applet_parts[]`` makes
+   :c:func:`applet_add_partition` fail with ``-ENOSPC`` for the larger
+   extensions.
+
+   For the same reason the sample keeps
+   :kconfig:option:`CONFIG_LLEXT_LOG_LEVEL_INF`: raising it to debug level
+   makes ``llext_bootstrap()`` log from the applet's user mode thread, which
+   then also needs ``k_log_partition`` in its domain.
