@@ -15,7 +15,7 @@ menuconfig APPLET
 	    - Load its code from an ELF binary at runtime (LLEXT)
 	    - Use memory domains for per-applet hardware memory isolation
 	      (requires CONFIG_USERSPACE)
-	    - Run all of its threads in unprivileged mode
+	    - Run none or all of its threads in unprivileged mode
 
 if APPLET
 
@@ -40,20 +40,22 @@ config APPLET_HEAP_SIZE
 	int "Heap (bytes) used for per-thread bookkeeping slots"
 	default 1024
 	help
-	  The applet subsystem allocates one z_applet_thread slot from a
-	  dedicated kernel heap each time z_applet_add_thread() is called.
+	  The applet subsystem allocates one applet_thread slot from a
+	  dedicated kernel heap each time applet_add_thread() is called.
 	  Each slot is roughly the size of a struct k_thread plus a
 	  k_mem_partition, so a 1024-byte heap typically holds 4-6 threads.
 
 	  Increase this value if your application creates many concurrent
-	  applet threads and z_applet_add_thread() starts returning
+	  applet threads and applet_add_thread() starts returning
 	  -ENOMEM.
 
 config APPLET_THREAD_STACK_SIZE_DEFAULT
 	int "Default applet thread stack size (bytes)"
 	default 2048
 	help
-	  Stack size used when z_applet_opts.thread_stack_size is 0.
+	  Suggested stack size for an applet thread. The applet subsystem never
+	  allocates stacks itself; applications use this value to size the
+	  stacks they pass to applet_add_thread() and friends.
 
 config APPLET_THREAD_PRIORITY_DEFAULT
 	int "Default applet thread scheduling priority"
@@ -61,19 +63,18 @@ config APPLET_THREAD_PRIORITY_DEFAULT
 	range -16 14
 	help
 	  Scheduling priority applied to a new applet thread when
-	  z_applet_opts.priority is not overridden.
+	  applet_opts.thread_priority is not overridden.
 
 config APPLET_FATAL_HANDLER
 	bool "Install a fatal error handler for applet threads"
 	help
 	  When enabled, the applet subsystem installs a custom
-	  k_sys_fatal_error_handler() that:
+	  k_sys_fatal_error_handler() that, depending on the value of
+	  opts.halt_on_fault, does one of the following:
 
-	    - If the faulting thread belongs to a applet whose
-	      opts.halt_on_fault is true, halts the whole system via
-	      k_fatal_halt().
-	    - Otherwise aborts only the offending thread (the default
-	      Zephyr behavior).
+	    - Halts the whole system via `k_fatal_halt()`
+		- Aborts all threads of the offending applet
+	    - Aborts only the offending thread
 
 	  Do not enable this option if your application already provides its
 	  own k_sys_fatal_error_handler().

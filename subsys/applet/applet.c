@@ -85,9 +85,6 @@ static void applet_unregister(struct applet *applet_inst)
 
 static void apply_default_opts(struct applet_opts *o)
 {
-	if (o->thread_stack_size == 0) {
-		o->thread_stack_size = CONFIG_APPLET_THREAD_STACK_SIZE_DEFAULT;
-	}
 	if (o->entry_sym == NULL) {
 		o->entry_sym = APPLET_ENTRY_SYM;
 	}
@@ -455,9 +452,47 @@ int applet_join(struct applet *applet_inst, k_timeout_t timeout)
 	return 0;
 }
 
+/*
+ * Threads cannot flag their own exit: a user-mode thread has no access to the
+ * descriptor, and an aborted one never runs cleanup code. Sample them instead;
+ * k_thread_join() with K_NO_WAIT reports termination from any context and
+ * returns -EDEADLK when an applet thread asks about its own applet, which
+ * correctly reads as "still running".
+ */
+static enum applet_state refresh_state(struct applet *applet_inst)
+{
+	if (applet_inst->state != APPLET_STATE_RUNNING) {
+		return applet_inst->state;
+	}
+
+	struct applet_thread *slot;
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {
+		if (!slot->started || slot->joined) {
+			continue;
+		}
+		if (k_thread_join(slot->thread, K_NO_WAIT) != 0) {
+			return APPLET_STATE_RUNNING;
+		}
+		slot->joined = true;
+	}
+
+	applet_inst->state = APPLET_STATE_DEAD;
+	return APPLET_STATE_DEAD;
+}
+
+enum applet_state applet_get_state(struct applet *applet_inst)
+{
+	if (applet_inst == NULL) {
+		return APPLET_STATE_UNLOADED;
+	}
+
+	return refresh_state(applet_inst);
+}
+
 int applet_kill(struct applet *applet_inst)
 {
-	if (applet_inst == NULL || applet_inst->state != APPLET_STATE_RUNNING) {
+	if (applet_inst == NULL || refresh_state(applet_inst) != APPLET_STATE_RUNNING) {
 		return -EINVAL;
 	}
 
@@ -484,7 +519,7 @@ void applet_unload(struct applet *applet_inst)
 		return;
 	}
 
-	if (applet_inst->state == APPLET_STATE_RUNNING) {
+	if (refresh_state(applet_inst) == APPLET_STATE_RUNNING) {
 		LOG_WRN("applet '%s': unloading while still running; "
 			"call applet_kill() first",
 			applet_inst->name);

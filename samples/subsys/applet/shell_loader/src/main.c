@@ -108,7 +108,6 @@ static const char *const applet_state_str[] = {
 	[APPLET_STATE_UNLOADED] = "unloaded",
 	[APPLET_STATE_LOADED]   = "loaded",
 	[APPLET_STATE_RUNNING]  = "running",
-	[APPLET_STATE_DYING]    = "dying",
 	[APPLET_STATE_DEAD]     = "dead",
 };
 

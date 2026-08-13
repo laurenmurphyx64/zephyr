@@ -17,17 +17,17 @@
  *
  * An applet may be either:
  *
- *  - **Native** — its threads run entry functions that are statically linked
- *    into the main Zephyr image. No ELF loading and no LLEXT is involved.
- *    When @kconfig{CONFIG_USERSPACE} is enabled, a dedicated
- *    @c k_mem_domain is still created so the applet's threads can share
- *    the partitions added via @ref applet_add_partition while remaining
- *    isolated from the rest of the system.
- *
  *  - **LLEXT-backed** — code is loaded at runtime from an ELF binary via
  *    the @ref llext API. The extension's TEXT/DATA/RODATA/BSS regions are
  *    added to the applet's memory domain, so the applet is
  *    hardware-isolated from the rest of the system.
+ * 
+ *  - **Native** — its threads run entry functions that are statically linked
+ *    into the main Zephyr image. No ELF loading or linking through LLEXT is
+ *    involved. When @kconfig{CONFIG_USERSPACE} is enabled, a dedicated
+ *    @c k_mem_domain is still created so the applet's threads can share
+ *    the partitions added via @ref applet_add_partition while remaining
+ *    isolated from the rest of the system.
  *
  * The number of threads per applet is not statically bounded — threads
  * are tracked in a linked list with per-slot heap allocations. The size
@@ -55,7 +55,7 @@ extern "C" {
 #define APPLET_ENTRY_SYM "applet_main"
 
 /**
- * @brief Process backend kind
+ * @brief Applet backend kind
  */
 enum applet_kind {
 	/** Code is linked into the main image; no ELF loading. */
@@ -65,17 +65,15 @@ enum applet_kind {
 };
 
 /**
- * @brief Process lifecycle states
+ * @brief Applet lifecycle states
  */
 enum applet_state {
 	/** Descriptor is initialised but holds no resources */
 	APPLET_STATE_UNLOADED = 0,
-	/** Process is ready to run (threads may be attached and started) */
+	/** Applet is ready to run (threads may be attached and started) */
 	APPLET_STATE_LOADED,
 	/** At least one applet thread is running */
 	APPLET_STATE_RUNNING,
-	/** At least one applet thread is exiting */
-	APPLET_STATE_DYING,
 	/** All applet threads have exited */
 	APPLET_STATE_DEAD,
 };
@@ -93,15 +91,9 @@ enum applet_halt_on_fault {
  * @brief Configuration options for an applet
  *
  * Initialise with @ref APPLET_OPTS_DEFAULT and then override individual
- * fields as needed. These options apply to *all* threads of the applet.
+ * fields as needed. These options apply to all threads of the applet.
  */
 struct applet_opts {
-	/**
-	 * Default stack size for threads added via @ref applet_spawn.
-	 * 0 selects @kconfig{CONFIG_APPLET_THREAD_STACK_SIZE_DEFAULT}.
-	 */
-	size_t thread_stack_size;
-
 	/** Default scheduling priority for threads of this applet. */
 	int thread_priority;
 
@@ -119,10 +111,8 @@ struct applet_opts {
 	bool user_mode;
 
 	/**
-	 * If @c true and @kconfig{CONFIG_APPLET_FATAL_HANDLER} is enabled,
-	 * halt the whole system when any thread of this applet triggers a
-	 * fatal error. Otherwise the offending thread is simply aborted.
-	 * Default: @c false.
+	 * If @kconfig{CONFIG_APPLET_FATAL_HANDLER} is enabled,
+	 * specifies behavior when a thread faults. See @ref applet_halt_on_fault.
 	 */
 	enum applet_halt_on_fault halt_on_fault;
 
@@ -140,11 +130,10 @@ struct applet_opts {
 /** @brief Default initialiser for @ref applet_opts */
 #define APPLET_OPTS_DEFAULT                                                 \
 	{                                                                      \
-		.thread_stack_size = 0,                                            \
 		.thread_priority   = CONFIG_APPLET_THREAD_PRIORITY_DEFAULT,              \
 		.cpu = 0,                                                         \
 		.user_mode     = IS_ENABLED(CONFIG_USERSPACE),                 \
-		.halt_on_fault = false,                                        \
+		.halt_on_fault = APPLET_HALT_ON_FAULT_APPLET,                                        \
 		.entry_sym     = APPLET_ENTRY_SYM,                          \
 		.arg           = NULL,                                         \
 	}
@@ -171,7 +160,7 @@ struct applet_thread {
 /** @endcond */
 
 /**
- * @brief Process descriptor. Treat as opaque; use the API functions.
+ * @brief Applet descriptor. Treat as opaque; use the API functions.
  */
 struct applet {
 	/** @cond INTERNAL_HIDDEN */
@@ -241,7 +230,7 @@ int applet_load_ext(struct applet *applet_inst, const char *name,
  * The number of threads per applet is bounded only by the size of the
  * applet slot heap (@kconfig{CONFIG_APPLET_HEAP_SIZE}).
  *
- * @param applet_inst Process in LOADED state
+ * @param applet_inst Applet in LOADED state
  * @param stack       Stack memory (e.g. via @ref APPLET_THREAD_STACK_DEFINE)
  * @param stack_size  Size of the stack in bytes
  * @param entry       Function to run in the new thread (Zephyr thread entry
@@ -251,7 +240,7 @@ int applet_load_ext(struct applet *applet_inst, const char *name,
  *
  * @retval 0        Success
  * @retval -EINVAL  Bad argument or wrong state
- * @retval -ENOMEM  Process slot heap exhausted; raise
+ * @retval -ENOMEM  Applet slot heap exhausted; raise
  *                  @kconfig{CONFIG_APPLET_HEAP_SIZE}
  */
 int applet_add_thread(struct applet *applet_inst,
@@ -282,7 +271,7 @@ int applet_add_thread_sym(struct applet *applet_inst,
  * Requires @kconfig{CONFIG_USERSPACE}; on builds without it this function
  * is a successful no-op.
  *
- * @param applet_inst  Process in LOADED state
+ * @param applet_inst  Applet in LOADED state
  * @param part  Caller-allocated partition (must remain valid for the
  *              lifetime of the applet)
  *
@@ -299,7 +288,7 @@ int applet_add_partition(struct applet *applet_inst,
  * For LLEXT-backed applets the extension's .init_array runs in supervisor
  * mode on the first call.
  *
- * @retval 0        Process is now @ref APPLET_STATE_RUNNING
+ * @retval 0        Applet is now @ref APPLET_STATE_RUNNING
  * @retval -EINVAL  No threads attached or wrong state
  * @retval <0       LLEXT bringup error
  */
@@ -342,10 +331,27 @@ int applet_kill(struct applet *applet_inst);
  */
 void applet_unload(struct applet *applet_inst);
 
-static inline enum applet_state applet_get_state(const struct applet *applet_inst)
-{
-	return applet_inst->state;
-}
+/**
+ * @brief Get the current lifecycle state of an applet.
+ *
+ * Applet threads never report their own exit, so an applet in
+ * @ref APPLET_STATE_RUNNING is resolved by sampling its threads: once all of
+ * them have terminated the applet moves to @ref APPLET_STATE_DEAD. This holds
+ * for threads that returned normally, were aborted, or died on a fatal error,
+ * and it requires nothing from the applet's own code -- which is what makes it
+ * work for unprivileged threads.
+ *
+ * The transition only happens when the state is observed, so call this rather
+ * than reading the descriptor.
+ *
+ * Must not be called concurrently with the other applet APIs on the same
+ * descriptor.
+ *
+ * @param applet_inst Applet descriptor, or NULL
+ *
+ * @return Current state, or @ref APPLET_STATE_UNLOADED if @p applet_inst is NULL
+ */
+enum applet_state applet_get_state(struct applet *applet_inst);
 
 static inline int applet_exit_code(const struct applet *applet_inst)
 {
@@ -358,7 +364,7 @@ static inline unsigned int applet_thread_count(const struct applet *applet_inst)
 }
 
 /**
- * @brief Get the @c k_thread for the @p idx-th attached thread.
+ * @brief Get the @c k_thread for the @p idx attached thread.
  *
  * Threads are tracked in attachment order. Returns NULL if @p idx is out
  * of range (i.e. @p idx >= applet_thread_count(applet)). Because the
