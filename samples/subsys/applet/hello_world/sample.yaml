@@ -17,6 +17,8 @@ common:
   integration_platforms:
     - qemu_cortex_a9
     - qemu_cortex_r5
+    - qemu_cortex_a53
+    - qemu_x86/atom/virt
     - mps2/an385
     - mps2/an521/cpu0
 

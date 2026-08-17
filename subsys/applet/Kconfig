@@ -55,7 +55,7 @@ config APPLET_THREAD_STACK_SIZE_DEFAULT
 	help
 	  Suggested stack size for an applet thread. The applet subsystem never
 	  allocates stacks itself; applications use this value to size the
-	  stacks they pass to applet_add_thread() and friends.
+	  stacks they pass to applet_add_thread() and applet_add_thread_sym().
 
 config APPLET_THREAD_PRIORITY_DEFAULT
 	int "Default applet thread scheduling priority"

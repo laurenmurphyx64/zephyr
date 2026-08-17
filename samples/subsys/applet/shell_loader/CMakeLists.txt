@@ -15,7 +15,7 @@ target_include_directories(app PRIVATE "${PROJECT_SOURCE_DIR}")
 foreach(ext hello_world ping pong)
   add_llext_target(${ext}_ext
     OUTPUT  "${PROJECT_BINARY_DIR}/${ext}.llext"
-    SOURCES "${PROJECT_SOURCE_DIR}/${ext}.c"
+    SOURCES "${PROJECT_SOURCE_DIR}/applet/${ext}_applet.c"
   )
   llext_include_directories(${ext}_ext "${PROJECT_SOURCE_DIR}")
   # llext targets do not inherit the optimization level of the image. Without

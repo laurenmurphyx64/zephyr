@@ -92,9 +92,6 @@ int main(void)
 	if (ret != 0) {
 		LOG_ERR("applet_join failed: %d", ret);
 		applet_kill(&hello_world_applet);
-	} else {
-		LOG_INF("Applet exited with code %d",
-			applet_exit_code(&hello_world_applet));
 	}
 
 	/* Release LLEXT memory and reset the descriptor */

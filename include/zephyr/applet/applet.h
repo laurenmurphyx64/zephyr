@@ -106,6 +106,7 @@ struct applet_opts {
 	 * domain. For native applets the caller is responsible for
 	 * ensuring the thread entry function only calls APIs permitted to
 	 * user threads.
+	 *
 	 * Default: @c true when CONFIG_USERSPACE is enabled.
 	 */
 	bool user_mode;
@@ -141,8 +142,8 @@ struct applet_opts {
 /** @cond INTERNAL_HIDDEN */
 
 /*
- * Per-thread bookkeeping slot.  One instance is heap-allocated for every
- * call to applet_add_thread() (and friends) and linked into
+ * Per-thread bookkeeping slot. One instance is heap-allocated for every
+ * call to applet_add_thread / applet_add_thread_sym and linked into
  * applet::threads.
  */
 struct applet_thread {
@@ -160,7 +161,7 @@ struct applet_thread {
 /** @endcond */
 
 /**
- * @brief Applet descriptor. Treat as opaque; use the API functions.
+ * @brief Applet descriptor. Treat as opaque; use the API functions to access.
  */
 struct applet {
 	/** @cond INTERNAL_HIDDEN */
@@ -181,11 +182,10 @@ struct applet {
 	unsigned int thread_count;
 
 	volatile enum applet_state state;
-	int exit_code;
 
 	struct applet_opts opts;
 
-	sys_snode_t reg_node;
+	sys_snode_t applet_node;
 	/** @endcond */
 };
 
@@ -217,9 +217,9 @@ int applet_init(struct applet *applet_inst, const char *name,
  * @brief Load an LLEXT-backed applet from an ELF image in memory.
  *
  * Sets up an LLEXT and (with @kconfig{CONFIG_USERSPACE}) a memory domain
- * containing the extension's regions.  Does not create any threads.
+ * containing the extension's regions. Does not create any threads.
  */
-int applet_load_ext(struct applet *applet_inst, const char *name,
+int applet_load_llext(struct applet *applet_inst, const char *name,
 		       const void *elf_data, size_t elf_size,
 		       const struct applet_opts *opts);
 #endif
@@ -304,7 +304,7 @@ int applet_spawn(struct applet *applet_inst, const char *name,
 		    const struct applet_opts *opts);
 
 /**
- * @brief Legacy wrapper: load LLEXT + attach a single thread, but do not
+ * @brief Legacy wrapper: load LLEXT and attach a single thread, but do not
  *        start the applet.
  */
 int applet_load(struct applet *applet_inst, const char *name,
@@ -352,11 +352,6 @@ void applet_unload(struct applet *applet_inst);
  * @return Current state, or @ref APPLET_STATE_UNLOADED if @p applet_inst is NULL
  */
 enum applet_state applet_get_state(struct applet *applet_inst);
-
-static inline int applet_exit_code(const struct applet *applet_inst)
-{
-	return applet_inst->exit_code;
-}
 
 static inline unsigned int applet_thread_count(const struct applet *applet_inst)
 {

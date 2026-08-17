@@ -361,8 +361,7 @@ static int cmd_applet_join(const struct shell *sh, size_t argc, char *argv[])
 		return ret;
 	}
 
-	shell_print(sh, "Applet %s finished with exit code %d", argv[1],
-		    applet_exit_code(&slot->inst));
+	shell_print(sh, "Applet %s finished", argv[1]);
 	return 0;
 }
 

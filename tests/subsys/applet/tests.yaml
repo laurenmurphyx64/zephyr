@@ -23,15 +23,13 @@ tests:
     filter: not CONFIG_MPU and not CONFIG_MMU
     extra_conf_files: ['no_mem_protection.conf']
   applet.native.mpu:
-    filter: CONFIG_MPU
-    extra_configs:
-      - CONFIG_USERSPACE=n
+    filter: CONFIG_MPU and not CONFIG_ARCH_HAS_USERSPACE
   applet.native.mpu.userspace:
-    filter: CONFIG_ARCH_HAS_USERSPACE and CONFIG_MPU
+    filter: CONFIG_MPU and CONFIG_ARCH_HAS_USERSPACE
     extra_configs:
       - CONFIG_USERSPACE=y
   applet.native.mmu:
-    filter: CONFIG_MMU or CONFIG_RISCV_PMP
+    filter: CONFIG_MMU or CONFIG_RISCV_PMP and not CONFIG_ARCH_HAS_USERSPACE
   applet.native.mmu.userspace:
     filter: (CONFIG_MMU or CONFIG_RISCV_PMP) and CONFIG_ARCH_HAS_USERSPACE
     extra_configs:

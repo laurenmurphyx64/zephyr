@@ -71,7 +71,7 @@ static void applet_register(struct applet *applet_inst)
 {
 	k_spinlock_key_t key = k_spin_lock(&applet_list_lock);
 
-	sys_slist_append(&applet_list, &applet_inst->reg_node);
+	sys_slist_append(&applet_list, &applet_inst->applet_node);
 	k_spin_unlock(&applet_list_lock, key);
 }
 
@@ -79,15 +79,8 @@ static void applet_unregister(struct applet *applet_inst)
 {
 	k_spinlock_key_t key = k_spin_lock(&applet_list_lock);
 
-	(void)sys_slist_find_and_remove(&applet_list, &applet_inst->reg_node);
+	(void)sys_slist_find_and_remove(&applet_list, &applet_inst->applet_node);
 	k_spin_unlock(&applet_list_lock, key);
-}
-
-static void apply_default_opts(struct applet_opts *o)
-{
-	if (o->entry_sym == NULL) {
-		o->entry_sym = APPLET_ENTRY_SYM;
-	}
 }
 
 static int init_descriptor(struct applet *applet_inst, const char *name,
@@ -106,7 +99,10 @@ static int init_descriptor(struct applet *applet_inst, const char *name,
 
 		applet_inst->opts = defaults;
 	}
-	apply_default_opts(&applet_inst->opts);
+	
+	if (applet_inst->opts.entry_sym == NULL) {
+		applet_inst->opts.entry_sym = APPLET_ENTRY_SYM;
+	}
 
 	applet_inst->kind = kind;
 	sys_slist_init(&applet_inst->threads);
@@ -161,7 +157,7 @@ int applet_init(struct applet *applet_inst, const char *name,
 }
 
 #ifdef CONFIG_APPLET_LLEXT
-int applet_load_ext(struct applet *applet_inst, const char *name,
+int applet_load_llext(struct applet *applet_inst, const char *name,
 		       const void *elf_data, size_t elf_size,
 		       const struct applet_opts *opts)
 {
@@ -352,7 +348,6 @@ int applet_start(struct applet *applet_inst)
 		if (ret != 0) {
 			LOG_ERR("applet '%s': llext_bringup failed (%d)",
 				applet_inst->name, ret);
-			applet_inst->exit_code = ret;
 			applet_inst->state = APPLET_STATE_DEAD;
 			return ret;
 		}
@@ -390,7 +385,7 @@ int applet_load(struct applet *applet_inst, const char *name,
 		   k_thread_stack_t *stack, size_t stack_size,
 		   const struct applet_opts *opts)
 {
-	int ret = applet_load_ext(applet_inst, name, elf_data, elf_size, opts);
+	int ret = applet_load_llext(applet_inst, name, elf_data, elf_size, opts);
 
 	if (ret != 0) {
 		return ret;
@@ -506,7 +501,6 @@ int applet_kill(struct applet *applet_inst)
 		slot->joined = true;
 	}
 
-	applet_inst->exit_code = -ECANCELED;
 	applet_inst->state     = APPLET_STATE_DEAD;
 
 	LOG_INF("applet '%s': killed", applet_inst->name);
@@ -521,7 +515,7 @@ void applet_unload(struct applet *applet_inst)
 
 	if (refresh_state(applet_inst) == APPLET_STATE_RUNNING) {
 		LOG_WRN("applet '%s': unloading while still running; "
-			"call applet_kill() first",
+			"calling applet_kill() first",
 			applet_inst->name);
 		applet_kill(applet_inst);
 	}
@@ -589,7 +583,7 @@ static struct applet *find_applet_of_thread(struct k_thread *thread)
 {
 	struct applet *applet_inst;
 
-	SYS_SLIST_FOR_EACH_CONTAINER(&applet_list, applet_inst, reg_node) {
+	SYS_SLIST_FOR_EACH_CONTAINER(&applet_list, applet_inst, applet_node) {
 		struct applet_thread *slot;
 
 		SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {

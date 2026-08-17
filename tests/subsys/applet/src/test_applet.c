@@ -114,9 +114,6 @@ ZTEST(applet, test_cpu_pinning)
 		LOG_ERR("applet_join failed: %d", ret);
 		applet_kill(&applet_1);
 		ztest_test_fail();
-	} else {
-		LOG_INF("Applet exited with code %d",
-			applet_exit_code(&applet_1));
 	}
 }
 

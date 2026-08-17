@@ -6,11 +6,14 @@
 Overview
 ********
 
-This example provides shell access to the applet subsystem, which is a wrapper
-around :ref:`llext` (and native Zephyr threads) that automatically manages
-threads, memory domains and privilege levels for a loaded extension.
+This example provides shell access to the applet subsystem, which
+allows for the grouping of threads into subapplications ("applets")
+and simplified memory domain management for those applets. Users can
+choose between a native applet, which is compiled into the Zephyr image,
+or a LLEXT-backed applet, which is compiled as an ELF and loaded at runtime,
+but for the purposes of this sample, only the latter is demonstrated.
 
-It is the applet equivalent of the
+This example is the applet equivalent of the
 :zephyr:code-sample:`llext-shell-loader` sample: an ELF is pasted into the
 shell as a hex string, but instead of loading it and calling an exported
 function directly, the extension is wrapped in an *applet*. The applet
@@ -33,7 +36,7 @@ The following command will build the main shell application:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/subsys/applet/shell_loader
-   :board: robokit1
+   :board: mps2/an385
    :goals: build
    :compact:
 
@@ -41,21 +44,19 @@ The following command will build the main shell application:
 
    You may need to disable memory protection for the sample to work (e.g.
    ``CONFIG_ARM_MPU=n`` on ARM, ``CONFIG_XTENSA_MMU=n`` /
-   ``CONFIG_XTENSA_MPU=n`` on Xtensa, ``CONFIG_RISCV_PMP=n`` on RISC-V). See
-   the full list of similar flags in
-   :zephyr_file:`tests/subsys/llext/no_mem_protection.conf`.
+   ``CONFIG_XTENSA_MPU=n`` on Xtensa, ``CONFIG_RISCV_PMP=n`` on RISC-V), etc.
 
 This sample also includes the source for three applet extensions, which can be
 used to exercise the applet features:
 
-* :zephyr_file:`samples/subsys/applet/shell_loader/hello_world.c` prints a
-  single line and returns.
-* :zephyr_file:`samples/subsys/applet/shell_loader/ping.c` is a two-thread
-  applet: one thread produces samples, the other one sums them and hands the
-  running total over to a peer applet.
-* :zephyr_file:`samples/subsys/applet/shell_loader/pong.c` is a service applet
-  that never returns: it folds its own seed into every value ``ping`` hands
-  over, and has to be killed to stop.
+* :zephyr_file:`samples/subsys/applet/shell_loader/applet/hello_world_applet.c`
+  prints a single line and returns.
+* :zephyr_file:`samples/subsys/applet/shell_loader/applet/ping_applet.c` is a
+  two-thread applet: one thread produces samples, the other one sums them and
+  hands the running total over to a peer applet.
+* :zephyr_file:`samples/subsys/applet/shell_loader/applet/pong_applet.c` is a
+  service applet that never returns: it folds its own seed into every value
+  ``ping`` hands over, and has to be killed to stop.
 
 They are built alongside the application, and can also be rebuilt on their own:
 
@@ -66,19 +67,20 @@ They are built alongside the application, and can also be rebuilt on their own:
 The resulting :file:`build/hello_world.llext`, :file:`build/ping.llext` and
 :file:`build/pong.llext` are the objects loaded by the shell.
 
-``hello_world.c`` is self-contained, so on a host machine with the Zephyr SDK
-and the matching toolchain in ``PATH`` it can also be produced directly. Pick
-the toolchain prefix that matches your target, for example
+``hello_world_applet.c`` is self-contained, so on a host machine with the
+Zephyr SDK and the matching toolchain in ``PATH`` it can also be produced
+directly. Pick the toolchain prefix that matches your target, for example
 ``arm-zephyr-eabi-`` for ARM, ``xtensa-<soc>_zephyr-elf-`` for Xtensa or
 ``riscv64-zephyr-elf-`` for RISC-V:
 
 .. code-block:: console
 
-   $ <toolchain-prefix>gcc -mlong-calls -c -o build/hello_world.llext samples/subsys/applet/shell_loader/hello_world.c
+   $ <toolchain-prefix>gcc -mlong-calls -c -o build/hello_world.llext samples/subsys/applet/shell_loader/applet/hello_world_applet.c
 
-``ping.c`` and ``pong.c`` include :zephyr_file:`include/zephyr/kernel.h` and
-the sample's own :zephyr_file:`samples/subsys/applet/shell_loader/applet_link.h`,
-so they must be built through the Zephyr build system (or the
+``ping_applet.c`` and ``pong_applet.c`` include
+:zephyr_file:`include/zephyr/kernel.h` and the sample's own
+:zephyr_file:`samples/subsys/applet/shell_loader/applet_link.h`, so they must
+be built through the Zephyr build system (or the
 :ref:`LLEXT EDK <llext_build_edk>`) to pick up the right include paths.
 
 .. note::
@@ -91,21 +93,15 @@ so they must be built through the Zephyr build system (or the
 
 .. note::
 
-   The extension must be rebuilt for each target architecture: an extension
-   compiled for ARM cannot be loaded on Xtensa or RISC-V, and vice versa. The
-   loader will accept the hex string but the CPU will trap when running the
-   applet because the instruction stream is foreign to it.
-
-.. note::
-
    The applet subsystem looks up the entry point by symbol name
    (``applet_main`` by default, see ``APPLET_ENTRY_SYM``), so that symbol must
-   be present in the extension's export table. LLEXT by default only exports
-   symbols explicitly marked with the :c:macro:`EXPORT_SYMBOL` macro, which
+   be present in the underlying LLEXT extension's export table. LLEXT by default
+   only exports symbols explicitly marked with the :c:macro:`EXPORT_SYMBOL` macro, which
    requires using the full Zephyr build system, or at least the
    :ref:`LLEXT EDK <llext_build_edk>`.
 
-   To avoid this complexity, this sample configures Zephyr to use all global
+   To avoid this complexity and allow users to compile the applets without
+   the build system or EDK, this sample configures Zephyr to use all global
    symbols defined in the extension ELF file via the Kconfig option
    :kconfig:option:`CONFIG_LLEXT_IMPORT_ALL_GLOBALS`. This is not recommended
    for large extensions as the memory usage increases significantly.
@@ -176,7 +172,7 @@ listed, started, waited on, and unloaded:
   hello world from applet (arg=0x2a)
   Started applet hello
   uart:~$ applet join hello
-  Applet hello finished with exit code 0
+  Applet hello finished
   uart:~$ applet unload hello
   Unloaded applet hello
 
@@ -237,7 +233,7 @@ timeout waits for both of its threads to return:
   uart:~$ applet join ping 5000
   [ping/gen] produced 8 samples
   [ping/sum] final total 1823
-  Applet ping finished with exit code 0
+  Applet ping finished
 
 ``pong`` never returns on its own, so joining it would block forever. It is
 stopped with ``applet kill``, which aborts every thread of that applet without
@@ -315,7 +311,7 @@ calls when the caller is unprivileged.
    On MPU based targets the number of partitions a memory domain can hold is
    bounded by the number of hardware regions left after the static ones, which
    on the Cortex-M platforms used here leaves very little headroom. An applet
-   needs one partition per section of its extension, plus the C library
+   needs one partition per region of its extension, plus the C library
    partition added by the applet subsystem, plus the shared one this sample
    adds. Adding more partitions to ``applet_parts[]`` makes
    :c:func:`applet_add_partition` fail with ``-ENOSPC`` for the larger
