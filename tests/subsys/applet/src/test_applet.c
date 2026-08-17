@@ -12,13 +12,13 @@
 
 LOG_MODULE_REGISTER(test_applet, LOG_LEVEL_INF);
 
-#ifdef CONFIG_LLEXT
+#ifdef CONFIG_APPLET_LLEXT
 static const uint8_t cpu_pinning_elf[] __aligned(4096) = {
 #include <cpu_pinning.inc>
 };
 #else
 extern void cpu_pinning_main(void *arg);
-#endif /* CONFIG_LLEXT */
+#endif /* CONFIG_APPLET_LLEXT */
 
 static ZTEST_DMEM volatile int expected_reason = -1;
 
@@ -78,7 +78,7 @@ ZTEST(applet, test_cpu_pinning)
 
 	int ret;
 
-#ifdef CONFIG_LLEXT
+#ifdef CONFIG_APPLET_LLEXT
 	ret = applet_spawn(&applet_1, "CPU pinning llext",
 			     cpu_pinning_elf, sizeof(cpu_pinning_elf),
 			     applet_1_thread_a_stack, K_THREAD_STACK_SIZEOF(applet_1_thread_a_stack),

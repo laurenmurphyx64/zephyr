@@ -218,6 +218,10 @@ int applet_init(struct applet *applet_inst, const char *name,
  *
  * Sets up an LLEXT and (with @kconfig{CONFIG_USERSPACE}) a memory domain
  * containing the extension's regions. Does not create any threads.
+ *
+ * The ELF image is parsed in the caller's context, so the calling thread
+ * needs roughly 1.5 kB of stack on top of its own usage. The default
+ * @kconfig{CONFIG_MAIN_STACK_SIZE} is not enough on most 32-bit targets.
  */
 int applet_load_llext(struct applet *applet_inst, const char *name,
 		       const void *elf_data, size_t elf_size,

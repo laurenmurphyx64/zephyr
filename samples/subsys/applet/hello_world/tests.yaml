@@ -1,11 +1,3 @@
-sample:
-  name: Applet - Hello World
-  description: >
-    Demonstrates loading and running a dynamically-loaded ELF (or native)
-    applet using the applet subsystem. The applet runs in an isolated memory domain
-    (and in user mode when CONFIG_USERSPACE is enabled) without any knowledge of LLEXT,
-    memory domains, or userspace internals.
-
 common:
   tags:
     - applet
@@ -21,6 +13,10 @@ common:
     - qemu_x86/atom/virt
     - mps2/an385
     - mps2/an521/cpu0
+
+sample:
+  name: Applet - Hello World
+  description:  Demonstrates applet subsystem
 
 tests:
   sample.applet.hello_world:
@@ -39,4 +35,8 @@ tests:
         - "Hello world from applet 'hello world' \\(arg=42\\)"
     extra_configs:
       - CONFIG_LLEXT=y
+      - CONFIG_APPLET_LLEXT=y
       - CONFIG_LLEXT_HEAP_SIZE=64
+      - arch:arm:CONFIG_ARM_MPU=n
+      - arch:arm:CONFIG_ARM_AARCH32_MMU=n
+      - arch:arc:CONFIG_ARC_MPU_ENABLE=n

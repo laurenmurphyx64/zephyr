@@ -24,13 +24,13 @@
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
-#ifdef CONFIG_LLEXT
+#ifdef CONFIG_APPLET_LLEXT
 static const uint8_t hello_world_elf[] __aligned(4096) = {
 #include <hello_world.inc>
 };
 #else
 extern void applet_main(void *arg);
-#endif /* CONFIG_LLEXT */
+#endif /* CONFIG_APPLET_LLEXT */
 
 /* Stack for the applet thread */
 APPLET_THREAD_STACK_DEFINE(hello_world_stack, CONFIG_APPLET_THREAD_STACK_SIZE_DEFAULT);
@@ -56,7 +56,7 @@ int main(void)
 	 * userspace is enabled.
 	 */
 	int ret;
-#ifdef CONFIG_LLEXT
+#ifdef CONFIG_APPLET_LLEXT
 	ret = applet_spawn(&hello_world_applet, "hello world llext",
 			     hello_world_elf, sizeof(hello_world_elf),
 			     hello_world_stack, K_THREAD_STACK_SIZEOF(hello_world_stack),

@@ -7,7 +7,7 @@ project(applet_hello_world LANGUAGES C)
 
 set(applet_src  ${PROJECT_SOURCE_DIR}/applet/hello_world_applet.c)
 
-if(CONFIG_LLEXT)
+if(CONFIG_APPLET_LLEXT)
   # Build the loadable extension (hello_world_ext.c -> hello_world.llext)
   # and embed it as a generated C header (hello_world.inc).
   set(applet_bin  ${PROJECT_BINARY_DIR}/llext/hello_world.llext)

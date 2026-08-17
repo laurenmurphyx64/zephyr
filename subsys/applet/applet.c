@@ -264,15 +264,19 @@ static int add_thread_internal(struct applet *applet_inst,
 #endif
 
 #ifdef CONFIG_APPLET_LLEXT
-	k_thread_create(slot->thread, slot->stack, slot->stack_size,
-			(k_thread_entry_t) &llext_bootstrap,
-			applet_inst->ext, slot->entry_fn, slot->arg,
-			slot->priority, opts_flags, K_FOREVER);
-#else
-	k_thread_create(slot->thread, slot->stack, slot->stack_size,
-			slot->entry_fn, slot->arg, NULL, NULL,
-			slot->priority, opts_flags, K_FOREVER);
+	if (applet_inst->kind == APPLET_KIND_LLEXT) {
+		/* Wrap the entry so the extension's init/fini tables run around it. */
+		k_thread_create(slot->thread, slot->stack, slot->stack_size,
+				(k_thread_entry_t)&llext_bootstrap,
+				applet_inst->ext, slot->entry_fn, slot->arg,
+				slot->priority, opts_flags, K_FOREVER);
+	} else
 #endif
+	{
+		k_thread_create(slot->thread, slot->stack, slot->stack_size,
+				slot->entry_fn, slot->arg, NULL, NULL,
+				slot->priority, opts_flags, K_FOREVER);
+	}
 
 	LOG_DBG("applet '%s': added thread %p (entry=%p, arg=%p, stack=%p, size=%zu)",
 		applet_inst->name, slot->thread, slot->entry_fn, slot->arg,

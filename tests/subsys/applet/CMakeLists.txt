@@ -20,8 +20,8 @@ set(applet_names
 )
 
 foreach(applet_name ${applet_names})
-if(CONFIG_LLEXT)
-  set(applet_src ${PROJECT_SOURCE_DIR}/src/${applet_name}_applet.c)
+if(CONFIG_APPLET_LLEXT)
+  set(applet_src ${PROJECT_SOURCE_DIR}/applet/${applet_name}_applet.c)
   set(applet_bin ${PROJECT_BINARY_DIR}/llext/${applet_name}.llext)
   set(applet_inc ${ZEPHYR_BINARY_DIR}/include/generated/${applet_name}.inc)
   add_llext_target(${applet_name}_applet
