@@ -27,6 +27,18 @@ LOG_MODULE_REGISTER(applet, CONFIG_APPLET_LOG_LEVEL);
 
 K_HEAP_DEFINE(applet_slot_heap, CONFIG_APPLET_HEAP_SIZE);
 
+/*
+ * Every public entry point runs under this mutex, so a descriptor is only ever
+ * mutated by one thread at a time. applet_join() releases it while it blocks so
+ * that a long wait on one applet does not stall operations on another.
+ */
+static K_MUTEX_DEFINE(applet_lock);
+
+/* Broadcast when an applet's outstanding join count drops back to zero. */
+static K_CONDVAR_DEFINE(applet_idle);
+
+static void unload_locked(struct applet *applet_inst);
+
 static struct applet_thread *slot_alloc(void)
 {
 	struct applet_thread *slot =
@@ -65,6 +77,12 @@ static void slot_free(struct applet_thread *slot)
 }
 
 static sys_slist_t applet_list = SYS_SLIST_STATIC_INIT(&applet_list);
+
+/*
+ * List integrity only, held just for the pointer updates and traversals. The
+ * fatal handler runs in fault context and cannot take applet_lock, so the lists
+ * it walks must also be consistent under a spinlock.
+ */
 static struct k_spinlock applet_list_lock;
 
 static void applet_register(struct applet *applet_inst)
@@ -81,6 +99,27 @@ static void applet_unregister(struct applet *applet_inst)
 
 	(void)sys_slist_find_and_remove(&applet_list, &applet_inst->applet_node);
 	k_spin_unlock(&applet_list_lock, key);
+}
+
+static int add_partition_locked(struct applet *applet_inst,
+				struct k_mem_partition *part)
+{
+	if (applet_inst == NULL || part == NULL) {
+		return -EINVAL;
+	}
+	if (applet_inst->state == APPLET_STATE_UNLOADED) {
+		return -EINVAL;
+	}
+
+#ifdef CONFIG_USERSPACE
+	if (!applet_inst->has_domain) {
+		return -EINVAL;
+	}
+	return k_mem_domain_add_partition(&applet_inst->domain, part);
+#else
+	ARG_UNUSED(part);
+	return 0;
+#endif
 }
 
 static int init_descriptor(struct applet *applet_inst, const char *name,
@@ -123,7 +162,7 @@ static int init_descriptor(struct applet *applet_inst, const char *name,
 
 #if defined(CONFIG_USERSPACE) && defined(Z_LIBC_PARTITION_EXISTS)
 	/* User-mode threads of any kind need this for errno/TLS/malloc state. */
-	applet_add_partition(applet_inst, &z_libc_partition);
+	add_partition_locked(applet_inst, &z_libc_partition);
 #endif
 
 	return 0;
@@ -136,30 +175,32 @@ int applet_init(struct applet *applet_inst, const char *name,
 		return -EINVAL;
 	}
 
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
 	int ret = init_descriptor(applet_inst, name, opts, APPLET_KIND_NATIVE);
 
-	if (ret != 0) {
-		return ret;
+	if (ret == 0) {
+		/*
+		 * Native applets default to supervisor mode: their entry functions
+		 * are arbitrary C code linked into the main image and usually call
+		 * APIs that are not user-callable. Callers who really want native
+		 * user-mode threads must opt in explicitly via opts.user_mode.
+		 */
+		if (opts == NULL) {
+			applet_inst->opts.user_mode = false;
+		}
+
+		LOG_INF("applet '%s': initialised (native)", applet_inst->name);
 	}
 
-	/*
-	 * Native applets default to supervisor mode: their entry functions
-	 * are arbitrary C code linked into the main image and usually call
-	 * APIs that are not user-callable. Callers who really want native
-	 * user-mode threads must opt in explicitly via opts.user_mode.
-	 */
-	if (opts == NULL) {
-		applet_inst->opts.user_mode = false;
-	}
-
-	LOG_INF("applet '%s': initialised (native)", applet_inst->name);
-	return 0;
+	k_mutex_unlock(&applet_lock);
+	return ret;
 }
 
 #ifdef CONFIG_APPLET_LLEXT
-int applet_load_llext(struct applet *applet_inst, const char *name,
-		       const void *elf_data, size_t elf_size,
-		       const struct applet_opts *opts)
+static int load_llext_locked(struct applet *applet_inst, const char *name,
+			     const void *elf_data, size_t elf_size,
+			     const struct applet_opts *opts)
 {
 	if (applet_inst == NULL || name == NULL || elf_data == NULL || elf_size == 0) {
 		return -EINVAL;
@@ -205,27 +246,29 @@ err:
 	applet_inst->state = APPLET_STATE_UNLOADED;
 	return ret;
 }
+
+int applet_load_llext(struct applet *applet_inst, const char *name,
+		       const void *elf_data, size_t elf_size,
+		       const struct applet_opts *opts)
+{
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	int ret = load_llext_locked(applet_inst, name, elf_data, elf_size, opts);
+
+	k_mutex_unlock(&applet_lock);
+	return ret;
+}
 #endif /* CONFIG_APPLET_LLEXT */
 
 int applet_add_partition(struct applet *applet_inst,
 			    struct k_mem_partition *part)
 {
-	if (applet_inst == NULL || part == NULL) {
-		return -EINVAL;
-	}
-	if (applet_inst->state == APPLET_STATE_UNLOADED) {
-		return -EINVAL;
-	}
+	k_mutex_lock(&applet_lock, K_FOREVER);
 
-#ifdef CONFIG_USERSPACE
-	if (!applet_inst->has_domain) {
-		return -EINVAL;
-	}
-	return k_mem_domain_add_partition(&applet_inst->domain, part);
-#else
-	ARG_UNUSED(part);
-	return 0;
-#endif
+	int ret = add_partition_locked(applet_inst, part);
+
+	k_mutex_unlock(&applet_lock);
+	return ret;
 }
 
 static int add_thread_internal(struct applet *applet_inst,
@@ -291,7 +334,11 @@ static int add_thread_internal(struct applet *applet_inst,
 	k_thread_name_set(slot->thread,
 			  thread_name != NULL ? thread_name : applet_inst->name);
 
+	k_spinlock_key_t key = k_spin_lock(&applet_list_lock);
+
 	sys_slist_append(&applet_inst->threads, &slot->node);
+	k_spin_unlock(&applet_list_lock, key);
+
 	applet_inst->thread_count++;
 	return 0;
 }
@@ -301,15 +348,20 @@ int applet_add_thread(struct applet *applet_inst,
 			 k_thread_entry_t entry, void *arg,
 			 const char *thread_name)
 {
-	return add_thread_internal(applet_inst, stack, stack_size, entry, arg,
-				   thread_name);
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	int ret = add_thread_internal(applet_inst, stack, stack_size, entry, arg,
+				      thread_name);
+
+	k_mutex_unlock(&applet_lock);
+	return ret;
 }
 
 #ifdef CONFIG_APPLET_LLEXT
-int applet_add_thread_sym(struct applet *applet_inst,
-			     k_thread_stack_t *stack, size_t stack_size,
-			     const char *entry_sym, void *arg,
-			     const char *thread_name)
+static int add_thread_sym_locked(struct applet *applet_inst,
+				 k_thread_stack_t *stack, size_t stack_size,
+				 const char *entry_sym, void *arg,
+				 const char *thread_name)
 {
 	if (applet_inst == NULL || applet_inst->kind != APPLET_KIND_LLEXT) {
 		return -EINVAL;
@@ -334,9 +386,23 @@ int applet_add_thread_sym(struct applet *applet_inst,
 	return add_thread_internal(applet_inst, stack, stack_size,
 				   (k_thread_entry_t)fn, arg, thread_name);
 }
+
+int applet_add_thread_sym(struct applet *applet_inst,
+			     k_thread_stack_t *stack, size_t stack_size,
+			     const char *entry_sym, void *arg,
+			     const char *thread_name)
+{
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	int ret = add_thread_sym_locked(applet_inst, stack, stack_size, entry_sym,
+					arg, thread_name);
+
+	k_mutex_unlock(&applet_lock);
+	return ret;
+}
 #endif /* CONFIG_APPLET_LLEXT */
 
-int applet_start(struct applet *applet_inst)
+static int start_locked(struct applet *applet_inst)
 {
 	if (applet_inst == NULL || applet_inst->state != APPLET_STATE_LOADED) {
 		return -EINVAL;
@@ -383,26 +449,37 @@ int applet_start(struct applet *applet_inst)
 	return 0;
 }
 
+int applet_start(struct applet *applet_inst)
+{
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	int ret = start_locked(applet_inst);
+
+	k_mutex_unlock(&applet_lock);
+	return ret;
+}
+
 #ifdef CONFIG_APPLET_LLEXT
 int applet_load(struct applet *applet_inst, const char *name,
 		   const void *elf_data, size_t elf_size,
 		   k_thread_stack_t *stack, size_t stack_size,
 		   const struct applet_opts *opts)
 {
-	int ret = applet_load_llext(applet_inst, name, elf_data, elf_size, opts);
+	k_mutex_lock(&applet_lock, K_FOREVER);
 
-	if (ret != 0) {
-		return ret;
+	int ret = load_llext_locked(applet_inst, name, elf_data, elf_size, opts);
+
+	if (ret == 0) {
+		ret = add_thread_sym_locked(applet_inst, stack, stack_size,
+					    applet_inst->opts.entry_sym,
+					    applet_inst->opts.arg, NULL);
+		if (ret != 0) {
+			unload_locked(applet_inst);
+		}
 	}
 
-	ret = applet_add_thread_sym(applet_inst, stack, stack_size,
-				       applet_inst->opts.entry_sym, applet_inst->opts.arg,
-				       NULL);
-	if (ret != 0) {
-		applet_unload(applet_inst);
-		return ret;
-	}
-	return 0;
+	k_mutex_unlock(&applet_lock);
+	return ret;
 }
 
 int applet_spawn(struct applet *applet_inst, const char *name,
@@ -410,12 +487,23 @@ int applet_spawn(struct applet *applet_inst, const char *name,
 		    k_thread_stack_t *stack, size_t stack_size,
 		    const struct applet_opts *opts)
 {
-	int ret = applet_load(applet_inst, name, elf_data, elf_size, stack,
-				 stack_size, opts);
-	if (ret != 0) {
-		return ret;
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	int ret = load_llext_locked(applet_inst, name, elf_data, elf_size, opts);
+
+	if (ret == 0) {
+		ret = add_thread_sym_locked(applet_inst, stack, stack_size,
+					    applet_inst->opts.entry_sym,
+					    applet_inst->opts.arg, NULL);
+		if (ret != 0) {
+			unload_locked(applet_inst);
+		} else {
+			ret = start_locked(applet_inst);
+		}
 	}
-	return applet_start(applet_inst);
+
+	k_mutex_unlock(&applet_lock);
+	return ret;
 }
 #endif /* CONFIG_APPLET_LLEXT */
 
@@ -424,31 +512,65 @@ int applet_join(struct applet *applet_inst, k_timeout_t timeout)
 	if (applet_inst == NULL) {
 		return -EINVAL;
 	}
+
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	int ret = 0;
+
 	if (applet_inst->state != APPLET_STATE_RUNNING &&
 	    applet_inst->state != APPLET_STATE_DEAD) {
-		return -EINVAL;
-	}
-	if (applet_inst->state == APPLET_STATE_DEAD) {
-		return 0;
+		ret = -EINVAL;
+		goto out;
 	}
 
-	struct applet_thread *slot;
+	/*
+	 * Restart the walk after every wait: the lock is dropped while blocking,
+	 * so slots may have been marked joined by someone else meanwhile. The
+	 * busy count keeps applet_unload() from freeing the thread object we are
+	 * parked on.
+	 */
+	for (;;) {
+		struct applet_thread *slot;
+		struct k_thread *target = NULL;
 
-	SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {
-		if (!slot->started || slot->joined) {
-			continue;
+		SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {
+			if (slot->started && !slot->joined) {
+				target = slot->thread;
+				break;
+			}
 		}
 
-		int ret = k_thread_join(slot->thread, timeout);
+		if (target == NULL) {
+			break;
+		}
+
+		applet_inst->join_busy++;
+		k_mutex_unlock(&applet_lock);
+
+		ret = k_thread_join(target, timeout);
+
+		k_mutex_lock(&applet_lock, K_FOREVER);
+		applet_inst->join_busy--;
+		if (applet_inst->join_busy == 0U) {
+			k_condvar_broadcast(&applet_idle);
+		}
 
 		if (ret != 0) {
-			return ret;
+			goto out;
 		}
-		slot->joined = true;
+
+		SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {
+			if (slot->thread == target) {
+				slot->joined = true;
+				break;
+			}
+		}
 	}
 
 	applet_inst->state = APPLET_STATE_DEAD;
-	return 0;
+out:
+	k_mutex_unlock(&applet_lock);
+	return ret;
 }
 
 /*
@@ -486,10 +608,15 @@ enum applet_state applet_get_state(struct applet *applet_inst)
 		return APPLET_STATE_UNLOADED;
 	}
 
-	return refresh_state(applet_inst);
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	enum applet_state state = refresh_state(applet_inst);
+
+	k_mutex_unlock(&applet_lock);
+	return state;
 }
 
-int applet_kill(struct applet *applet_inst)
+static int kill_locked(struct applet *applet_inst)
 {
 	if (applet_inst == NULL || refresh_state(applet_inst) != APPLET_STATE_RUNNING) {
 		return -EINVAL;
@@ -511,7 +638,17 @@ int applet_kill(struct applet *applet_inst)
 	return 0;
 }
 
-void applet_unload(struct applet *applet_inst)
+int applet_kill(struct applet *applet_inst)
+{
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	int ret = kill_locked(applet_inst);
+
+	k_mutex_unlock(&applet_lock);
+	return ret;
+}
+
+static void unload_locked(struct applet *applet_inst)
 {
 	if (applet_inst == NULL || applet_inst->state == APPLET_STATE_UNLOADED) {
 		return;
@@ -521,7 +658,16 @@ void applet_unload(struct applet *applet_inst)
 		LOG_WRN("applet '%s': unloading while still running; "
 			"calling applet_kill() first",
 			applet_inst->name);
-		applet_kill(applet_inst);
+		kill_locked(applet_inst);
+	}
+
+	/*
+	 * Aborting the threads above releases any blocked joiner, but a joiner
+	 * still holds a pointer to the k_thread we are about to free until it
+	 * gets scheduled again.
+	 */
+	while (applet_inst->join_busy != 0U) {
+		k_condvar_wait(&applet_idle, &applet_lock, K_FOREVER);
 	}
 
 #ifdef CONFIG_APPLET_LLEXT
@@ -548,12 +694,16 @@ void applet_unload(struct applet *applet_inst)
 #endif
 
 	/* Free every per-thread slot */
-	sys_snode_t *node;
+	for (;;) {
+		k_spinlock_key_t key = k_spin_lock(&applet_list_lock);
+		sys_snode_t *node = sys_slist_get(&applet_inst->threads);
 
-	while ((node = sys_slist_get(&applet_inst->threads)) != NULL) {
-		struct applet_thread *slot =
-			CONTAINER_OF(node, struct applet_thread, node);
-		slot_free(slot);
+		k_spin_unlock(&applet_list_lock, key);
+
+		if (node == NULL) {
+			break;
+		}
+		slot_free(CONTAINER_OF(node, struct applet_thread, node));
 	}
 
 	applet_unregister(applet_inst);
@@ -563,40 +713,77 @@ void applet_unload(struct applet *applet_inst)
 	applet_inst->state = APPLET_STATE_UNLOADED;
 }
 
+void applet_unload(struct applet *applet_inst)
+{
+	k_mutex_lock(&applet_lock, K_FOREVER);
+	unload_locked(applet_inst);
+	k_mutex_unlock(&applet_lock);
+}
+
+unsigned int applet_thread_count(struct applet *applet_inst)
+{
+	if (applet_inst == NULL) {
+		return 0;
+	}
+
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
+	unsigned int count = applet_inst->thread_count;
+
+	k_mutex_unlock(&applet_lock);
+	return count;
+}
+
 struct k_thread *applet_thread_get(struct applet *applet_inst, unsigned int idx)
 {
 	if (applet_inst == NULL) {
 		return NULL;
 	}
 
+	k_mutex_lock(&applet_lock, K_FOREVER);
+
 	struct applet_thread *slot;
+	struct k_thread *thread = NULL;
 	unsigned int i = 0;
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {
 		if (i == idx) {
-			return slot->thread;
+			thread = slot->thread;
+			break;
 		}
 		i++;
 	}
-	return NULL;
+
+	k_mutex_unlock(&applet_lock);
+	return thread;
 }
 
 #ifdef CONFIG_APPLET_FATAL_HANDLER
 
+/*
+ * Runs in fault context, where applet_lock cannot be taken. The spinlock keeps
+ * the traversal consistent against concurrent list updates; faulting in an
+ * applet that another thread is unloading at the same time is not covered.
+ */
 static struct applet *find_applet_of_thread(struct k_thread *thread)
 {
+	k_spinlock_key_t key = k_spin_lock(&applet_list_lock);
 	struct applet *applet_inst;
+	struct applet *found = NULL;
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&applet_list, applet_inst, applet_node) {
 		struct applet_thread *slot;
 
 		SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {
 			if (slot->thread == thread) {
-				return applet_inst;
+				found = applet_inst;
+				goto out;
 			}
 		}
 	}
-	return NULL;
+out:
+	k_spin_unlock(&applet_list_lock, key);
+	return found;
 }
 
 void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
@@ -619,7 +806,8 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 			LOG_ERR("applet '%s': fatal error %u in thread %p; "
 				"aborting all threads in applet",
 				applet_inst->name, reason, (void *)cur);
-			applet_kill(applet_inst);
+			/* Lock-free on purpose: fault context cannot block. */
+			kill_locked(applet_inst);
 			CODE_UNREACHABLE;
 		} else if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_THREAD) {
 			LOG_PANIC();

@@ -33,6 +33,24 @@
  * are tracked in a linked list with per-slot heap allocations. The size
  * of the slot heap is controlled by @kconfig{CONFIG_APPLET_HEAP_SIZE}.
  *
+ * @section applet_thread_safety Thread safety
+ *
+ * All functions in this API may be called concurrently from any number of
+ * threads, including on the same descriptor. They are serialised by an
+ * internal mutex, so they must be called from thread context only.
+ *
+ * @ref applet_join releases that mutex while it waits, so a long join on one
+ * applet does not block operations on another. @ref applet_unload waits for
+ * any in-flight join on the same applet to return before it frees anything.
+ *
+ * Two exceptions remain the caller's responsibility:
+ *
+ *  - Concurrent @ref applet_init / @ref applet_load_llext calls on the *same*
+ *    descriptor. There is nothing to serialise against until the descriptor
+ *    exists.
+ *  - The @kconfig{CONFIG_APPLET_FATAL_HANDLER} path runs in fault context and
+ *    cannot take the mutex, so it is best-effort.
+ *
  * @defgroup applet_apis Applet Model
  * @since 4.4
  * @version 0.3.0
@@ -181,6 +199,9 @@ struct applet {
 	sys_slist_t threads;
 	unsigned int thread_count;
 
+	/* Threads currently blocked inside applet_join() on this applet. */
+	unsigned int join_busy;
+
 	volatile enum applet_state state;
 
 	struct applet_opts opts;
@@ -320,6 +341,10 @@ int applet_load(struct applet *applet_inst, const char *name,
 /**
  * @brief Wait for all applet threads to finish.
  *
+ * The internal lock is released while waiting, so other threads can keep
+ * operating on this and other applets. A concurrent @ref applet_unload on the
+ * same applet aborts the threads and then waits for this call to return.
+ *
  * @param timeout  Maximum time to wait per thread. If it expires on any
  *                 thread, @c -EAGAIN is returned immediately.
  */
@@ -332,6 +357,9 @@ int applet_kill(struct applet *applet_inst);
 
 /**
  * @brief Release all resources and reset the descriptor.
+ *
+ * Kills any thread still running, then waits for concurrent joins on this
+ * applet to return before freeing the thread objects they refer to.
  */
 void applet_unload(struct applet *applet_inst);
 
@@ -357,17 +385,19 @@ void applet_unload(struct applet *applet_inst);
  */
 enum applet_state applet_get_state(struct applet *applet_inst);
 
-static inline unsigned int applet_thread_count(const struct applet *applet_inst)
-{
-	return applet_inst->thread_count;
-}
+/**
+ * @brief Number of threads currently attached to the applet.
+ *
+ * @return Snapshot of the count; 0 if @p applet_inst is NULL.
+ */
+unsigned int applet_thread_count(struct applet *applet_inst);
 
 /**
  * @brief Get the @c k_thread for the @p idx attached thread.
  *
  * Threads are tracked in attachment order. Returns NULL if @p idx is out
  * of range (i.e. @p idx >= applet_thread_count(applet)). Because the
- * underlying slot is heap-allocated, the returned pointer is only stable
+ * underlying slot is heap-allocated, the returned pointer is only valid
  * until the applet is unloaded.
  */
 struct k_thread *applet_thread_get(struct applet *applet_inst,
