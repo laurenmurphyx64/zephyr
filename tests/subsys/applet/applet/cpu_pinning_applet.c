@@ -15,7 +15,12 @@
  */
 void cpu_pinning_main(void *arg)
 {
+	/* arch_curr_cpu() is only provided by the arch layer on SMP targets. */
+#ifdef CONFIG_SMP
 	unsigned int cpu = arch_curr_cpu()->id;
+#else
+	unsigned int cpu = 0;
+#endif
 
 	zassert_equal(cpu, (unsigned int)(uintptr_t)arg,
 		      "applet main running on wrong CPU %u, expected %u", cpu,

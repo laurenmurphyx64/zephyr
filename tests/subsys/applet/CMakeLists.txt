@@ -5,11 +5,18 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(applet_test)
 
-target_sources(app PRIVATE
-  src/test_applet.c
-)
+if(CONFIG_TEST_APPLET_HALT_SYSTEM)
+  target_sources(app PRIVATE
+    src/test_halt_system.c
+  )
+else()
+  target_sources(app PRIVATE
+    src/test_applet.c
+  )
+endif()
 
 target_include_directories(app PRIVATE
+  ${PROJECT_SOURCE_DIR}/applet
   ${ZEPHYR_BASE}/include
   ${ZEPHYR_BASE}/kernel/include
   ${ZEPHYR_BASE}/arch/${ARCH}/include
@@ -17,6 +24,7 @@ target_include_directories(app PRIVATE
 
 set(applet_names
   cpu_pinning
+  worker
 )
 
 foreach(applet_name ${applet_names})

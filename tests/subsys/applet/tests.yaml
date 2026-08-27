@@ -1,45 +1,119 @@
 common:
   tags: applet
   platform_exclude:
-      # platforms with active LLEXT issues
-      - numaker_pfm_m487        # See #63167
-      - s32z2xxdc2/s32z270/rtu0 # See commit 18a0660
-      - s32z2xxdc2/s32z270/rtu1 # See commit 18a0660
+    # platforms with active LLEXT issues
+    - numaker_pfm_m487        # See #63167
+    - s32z2xxdc2/s32z270/rtu0 # See commit 18a0660
+    - s32z2xxdc2/s32z270/rtu1 # See commit 18a0660
   integration_platforms:
     - qemu_cortex_a9          # ARM Cortex-A9 (ARMv7-A ISA)
     - qemu_cortex_r5          # ARM Cortex-R5 (ARMv7-R ISA)
-    - qemu_cortex_a53         # ARM Cortex-A53 (ARMv8-A ISA)
     - mps2/an383              # ARM Cortex-M0+ (ARMv6-M ISA)
     - mps2/an385              # ARM Cortex-M3 (ARMv7-M ISA)
     - mps2/an521/cpu0         # ARM Cortex-M33 (ARMv8-M ISA)
-    - qemu_xtensa/dc233c
-    - qemu_arc/qemu_arc_em
-    - qemu_x86/atom/virt
-    - qemu_riscv32/qemu_virt_riscv32
-  min_ram: 172
-  min_flash: 172
+    - qemu_riscv32/qemu_virt_riscv32 # RISC-V RV32 ISA
+  # Worst case measured across the scenarios below is applet.llext.writable on
+  # qemu_xtensa/dc233c at ~164 kB, and applet.llext.readonly.mpu on mps2/an385
+  # at ~155 kB flash / ~91 kB RAM. The applet slot heap, the extension heap and
+  # the six thread stacks dominate.
+  min_ram: 192
+  min_flash: 192
+  # The concurrency cases park threads in applet_join() and poll around them,
+  # which is slow under emulation.
+  timeout: 180
   extra_conf_files:
     - prj.conf
 
 tests:
-  applet.loader_build:
+  applet.build:
     build_only: true
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
 
   applet.native:
     filter: not CONFIG_MPU and not CONFIG_MMU
     extra_conf_files: ['no_mem_protection.conf']
-  applet.native.mpu:
-    filter: CONFIG_MPU and not CONFIG_ARCH_HAS_USERSPACE
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
   applet.native.mpu.userspace:
     filter: CONFIG_MPU and CONFIG_ARCH_HAS_USERSPACE
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
     extra_configs:
       - CONFIG_USERSPACE=y
   applet.native.mmu:
     filter: CONFIG_MMU or CONFIG_RISCV_PMP and not CONFIG_ARCH_HAS_USERSPACE
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
   applet.native.mmu.userspace:
     filter: (CONFIG_MMU or CONFIG_RISCV_PMP) and CONFIG_ARCH_HAS_USERSPACE
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
     extra_configs:
       - CONFIG_USERSPACE=y
+
+  # CONFIG_APPLET_FATAL_HANDLER replaces the suite's own
+  # k_sys_fatal_error_handler(), so the fault cases need their own scenarios.
+  applet.native.fatal:
+    filter: not CONFIG_MPU and not CONFIG_MMU
+    extra_conf_files: ['no_mem_protection.conf']
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
+    extra_configs:
+      - CONFIG_APPLET_FATAL_HANDLER=y
+  applet.native.fatal.userspace:
+    filter: (CONFIG_MPU or CONFIG_MMU) and CONFIG_ARCH_HAS_USERSPACE
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
+    extra_configs:
+      - CONFIG_USERSPACE=y
+      - CONFIG_APPLET_FATAL_HANDLER=y
+
+  # APPLET_HALT_ON_FAULT_SYSTEM ends in k_fatal_halt(), so the image never
+  # returns to ztest and there is nothing to report a verdict. The console
+  # harness matches the handler's output instead. The build runs the
+  # applet_halt_system suite only, so it stays quick.
+  applet.native.fatal.halt_system:
+    harness: console
+    ignore_faults: true
+    ignore_qemu_crash: true
+    timeout: 60
+    integration_platforms:
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_xtensa/dc233c      # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
+    extra_configs:
+      - CONFIG_APPLET_FATAL_HANDLER=y
+      - CONFIG_TEST_APPLET_HALT_SYSTEM=y
+    harness_config:
+      type: multi_line
+      ordered: true
+      regex:
+        - "ZEPHYR FATAL ERROR \\d+: Kernel oops"
+        - "applet 'halt-system': fatal error \\d+ in thread .*halting system"
+
   applet.llext.readonly:
     arch_allow:               # Xtensa needs writable storage
       - arm
@@ -48,6 +122,9 @@ tests:
       - x86
     filter: not CONFIG_MPU and not CONFIG_MMU
     extra_conf_files: ['no_mem_protection.conf']
+    integration_platforms:
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
     extra_configs:
       - CONFIG_LLEXT=y
       - CONFIG_LLEXT_VENEERS=y
@@ -58,16 +135,21 @@ tests:
       - arc
       - riscv
     # RISC-V is listed above only so that it is not reported as an integration
-    # platform outside the arch allow list; the filter below skips it. LLEXT
-    # does not round region sizes to CONFIG_PMP_GRANULARITY, so the PMP entry
-    # for .text is truncated and the extension is not fully executable from
-    # user mode.
+    # platform outside the arch allow list; the filter below skips it. The
+    # RISC-V arch_is_user_mode() reads the kernel variable is_user_mode, which
+    # is not in the LLEXT export table, so linking the extension fails with
+    # -ENODATA. tests/subsys/llext skips llext.readonly_mpu for the same reason.
     filter: CONFIG_ARCH_HAS_USERSPACE and not CONFIG_RISCV_PMP
+    integration_platforms:
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
     extra_configs:
       - CONFIG_USERSPACE=y
       - CONFIG_LLEXT=y
       - CONFIG_LLEXT_VENEERS=y
       - CONFIG_LLEXT_STORAGE_WRITABLE=n
+      # Two applets are loaded at once and MPU regions must be naturally
+      # aligned, so the default 8 kB heap is not enough on ARC.
+      - CONFIG_LLEXT_HEAP_SIZE=32
   applet.llext.readonly.mmu:
     arch_allow:
       - arm64
@@ -78,7 +160,8 @@ tests:
       - qemu_x86_tiny/atom       # See #105603
     filter: CONFIG_MMU or CONFIG_RISCV_PMP
     integration_platforms:
-      - qemu_cortex_a53         # ARM Cortex-A53 (ARMv8-A ISA)
+      - qemu_cortex_a53/qemu_cortex_a53/smp # ARM Cortex-A53 SMP (ARMv8-A ISA)
+      - qemu_x86                # x86 (Atom) ISA
     extra_configs:
       - CONFIG_LLEXT=y
       - CONFIG_LLEXT_HEAP_SIZE=128 # qemu_cortex_a9 requires larger heap
@@ -99,6 +182,8 @@ tests:
     integration_platforms:
       - qemu_xtensa/dc233c      # Xtensa ISA
       - esp32_devkitc/esp32/procpu # Xtensa ISA
+      - qemu_arc/qemu_arc_em    # ARC EM ISA
+      - qemu_x86                # x86 (Atom) ISA
     filter: not CONFIG_MPU and not CONFIG_MMU
     extra_conf_files: ['no_mem_protection.conf']
     extra_configs:
