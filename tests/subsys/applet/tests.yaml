@@ -135,10 +135,14 @@ tests:
       - arc
       - riscv
     # RISC-V is listed above only so that it is not reported as an integration
-    # platform outside the arch allow list; the filter below skips it. The
-    # RISC-V arch_is_user_mode() reads the kernel variable is_user_mode, which
-    # is not in the LLEXT export table, so linking the extension fails with
-    # -ENODATA. tests/subsys/llext skips llext.readonly_mpu for the same reason.
+    # platform outside the arch allow list; the filter below skips it. Two
+    # things break there. LLEXT does not round region sizes to
+    # CONFIG_PMP_GRANULARITY, so the PMP entry for .text is truncated and its
+    # tail is not executable from user mode (mcause 1, Instruction Access
+    # fault). The RISC-V arch_is_user_mode() also reads the kernel variable
+    # is_user_mode, which is not in the LLEXT export table, so linking the
+    # extension fails with -ENODATA. tests/subsys/llext skips llext.readonly_mpu
+    # for the same reason.
     filter: CONFIG_ARCH_HAS_USERSPACE and not CONFIG_RISCV_PMP
     integration_platforms:
       - qemu_arc/qemu_arc_em    # ARC EM ISA
