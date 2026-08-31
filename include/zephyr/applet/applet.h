@@ -216,11 +216,21 @@ struct applet {
 #define APPLET_THREAD_STACK_DEFINE(_name, _size) K_THREAD_STACK_DEFINE(_name, _size)
 
 /**
+ * @brief Define an array of stacks suitable for applet threads.
+ */
+#define APPLET_THREAD_STACK_ARRAY_DEFINE(_name, _nmemb, _size)                                     \
+	K_THREAD_STACK_ARRAY_DEFINE(_name, _nmemb, _size)
+
+/**
  * @brief Initialise a native applet descriptor.
  *
  * When @kconfig{CONFIG_USERSPACE} is enabled, a fresh (empty)
  * @c k_mem_domain is created so subsequently-added threads can access the
  * partitions added via @ref applet_add_partition.
+ *
+ * A descriptor must be zero-initialised before its first use (static storage
+ * is). It may be re-initialised after @ref applet_unload; the memory domain
+ * is then reused, because most architectures cannot deinitialise one.
  *
  * @param applet_inst  Descriptor to initialise (zeroed by the call)
  * @param name  Human-readable name of the applet_inst
@@ -365,9 +375,6 @@ void applet_unload(struct applet *applet_inst);
  *
  * The transition only happens when the state is observed, so call this rather
  * than reading the descriptor.
- *
- * Must not be called concurrently with the other applet APIs on the same
- * descriptor.
  *
  * @param applet_inst Applet descriptor, or NULL
  *

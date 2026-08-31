@@ -9,6 +9,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <zephyr/applet/applet.h>
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/util.h>
@@ -121,10 +122,61 @@ static int add_partition_locked(struct applet *applet_inst, struct k_mem_partiti
 #endif
 }
 
+/*
+ * Clear a descriptor for (re)use. The memory domain is deliberately left
+ * untouched: k_mem_domain_init() must not run twice on the same domain and
+ * only CONFIG_ARCH_MEM_DOMAIN_SUPPORTS_DEINIT arches can take one down, so an
+ * unloaded descriptor may still own a live domain that the arch layer tracks
+ * by address.
+ */
+static void reset_descriptor(struct applet *applet_inst)
+{
+	applet_inst->name[0] = '\0';
+	applet_inst->kind = APPLET_KIND_NATIVE;
+#ifdef CONFIG_APPLET_LLEXT
+	applet_inst->ext = NULL;
+	applet_inst->bringup_done = false;
+#endif
+	sys_slist_init(&applet_inst->threads);
+	applet_inst->thread_count = 0U;
+	applet_inst->join_busy = 0U;
+	memset(&applet_inst->opts, 0, sizeof(applet_inst->opts));
+	applet_inst->applet_node.next = NULL;
+	applet_inst->state = APPLET_STATE_UNLOADED;
+}
+
+#ifdef CONFIG_USERSPACE
+static int init_domain(struct applet *applet_inst)
+{
+	if (!applet_inst->has_domain) {
+		int ret = k_mem_domain_init(&applet_inst->domain, 0, NULL);
+
+		if (ret != 0) {
+			LOG_ERR("applet '%s': k_mem_domain_init failed (%d)", applet_inst->name,
+				ret);
+			return ret;
+		}
+		applet_inst->has_domain = true;
+		return 0;
+	}
+
+	/* Reused domain: start from the same blank slate a fresh one would. */
+	for (int i = 0; i < CONFIG_MAX_DOMAIN_PARTITIONS; i++) {
+		struct k_mem_partition *part = &applet_inst->domain.partitions[i];
+
+		if (part->size != 0U) {
+			(void)k_mem_domain_remove_partition(&applet_inst->domain, part);
+		}
+	}
+
+	return 0;
+}
+#endif /* CONFIG_USERSPACE */
+
 static int init_descriptor(struct applet *applet_inst, const char *name,
 			   const struct applet_opts *opts, enum applet_kind kind)
 {
-	memset(applet_inst, 0, sizeof(*applet_inst));
+	reset_descriptor(applet_inst);
 
 	strncpy(applet_inst->name, name, CONFIG_APPLET_NAME_MAX_LEN);
 	applet_inst->name[CONFIG_APPLET_NAME_MAX_LEN] = '\0';
@@ -145,13 +197,11 @@ static int init_descriptor(struct applet *applet_inst, const char *name,
 	sys_slist_init(&applet_inst->threads);
 
 #ifdef CONFIG_USERSPACE
-	int ret = k_mem_domain_init(&applet_inst->domain, 0, NULL);
+	int ret = init_domain(applet_inst);
 
 	if (ret != 0) {
-		LOG_ERR("applet '%s': k_mem_domain_init failed (%d)", applet_inst->name, ret);
 		return ret;
 	}
-	applet_inst->has_domain = true;
 #endif
 
 	applet_inst->state = APPLET_STATE_LOADED;
@@ -230,8 +280,7 @@ static int load_llext_locked(struct applet *applet_inst, const char *name, const
 
 err:
 #ifdef CONFIG_USERSPACE
-	if (applet_inst->has_domain) {
-		k_mem_domain_deinit(&applet_inst->domain);
+	if (applet_inst->has_domain && k_mem_domain_deinit(&applet_inst->domain) == 0) {
 		applet_inst->has_domain = false;
 	}
 #endif
@@ -604,25 +653,38 @@ enum applet_state applet_get_state(struct applet *applet_inst)
 	return state;
 }
 
-static int kill_locked(struct applet *applet_inst)
+static int kill_locked(struct applet *applet_inst, bool abort_self)
 {
 	if (applet_inst == NULL || refresh_state(applet_inst) != APPLET_STATE_RUNNING) {
 		return -EINVAL;
 	}
 
+	struct k_thread *self = k_current_get();
 	struct applet_thread *slot;
+	bool kill_self = false;
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&applet_inst->threads, slot, node) {
 		if (!slot->started || slot->joined) {
 			continue;
 		}
-		k_thread_abort(slot->thread);
 		slot->joined = true;
+
+		/* Aborting ourselves here would strand the remaining threads. */
+		if (slot->thread == self) {
+			kill_self = true;
+			continue;
+		}
+		k_thread_abort(slot->thread);
 	}
 
 	applet_inst->state = APPLET_STATE_DEAD;
 
 	LOG_INF("applet '%s': killed", applet_inst->name);
+
+	if (kill_self && abort_self) {
+		k_thread_abort(self);
+	}
+
 	return 0;
 }
 
@@ -630,7 +692,7 @@ int applet_kill(struct applet *applet_inst)
 {
 	k_mutex_lock(&applet_lock, K_FOREVER);
 
-	int ret = kill_locked(applet_inst);
+	int ret = kill_locked(applet_inst, true);
 
 	k_mutex_unlock(&applet_lock);
 	return ret;
@@ -646,7 +708,7 @@ static void unload_locked(struct applet *applet_inst)
 		LOG_WRN("applet '%s': unloading while still running; "
 			"calling applet_kill() first",
 			applet_inst->name);
-		kill_locked(applet_inst);
+		kill_locked(applet_inst, true);
 	}
 
 	/*
@@ -669,8 +731,8 @@ static void unload_locked(struct applet *applet_inst)
 #endif
 
 #ifdef CONFIG_USERSPACE
-	if (applet_inst->has_domain) {
-		k_mem_domain_deinit(&applet_inst->domain);
+	if (applet_inst->has_domain && k_mem_domain_deinit(&applet_inst->domain) == 0) {
+		applet_inst->has_domain = false;
 	}
 #endif
 
@@ -696,8 +758,7 @@ static void unload_locked(struct applet *applet_inst)
 	applet_unregister(applet_inst);
 	LOG_INF("applet '%s': unloaded", applet_inst->name);
 
-	memset(applet_inst, 0, sizeof(*applet_inst));
-	applet_inst->state = APPLET_STATE_UNLOADED;
+	reset_descriptor(applet_inst);
 }
 
 void applet_unload(struct applet *applet_inst)
@@ -788,23 +849,27 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 				applet_inst->name, reason, (void *)cur);
 			k_fatal_halt(reason);
 			CODE_UNREACHABLE;
-		} else if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_APPLET) {
+		}
+
+		if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_APPLET) {
 			LOG_PANIC();
 			LOG_ERR("applet '%s': fatal error %u in thread %p; "
 				"aborting all threads in applet",
 				applet_inst->name, reason, (void *)cur);
 			/* Lock-free on purpose: fault context cannot block. */
-			kill_locked(applet_inst);
-			CODE_UNREACHABLE;
-		} else if (applet_inst->opts.halt_on_fault == APPLET_HALT_ON_FAULT_THREAD) {
+			kill_locked(applet_inst, false);
+		} else {
 			LOG_PANIC();
 			LOG_ERR("applet '%s': fatal error %u in thread %p; "
 				"aborting thread",
 				applet_inst->name, reason, (void *)cur);
-			k_thread_abort(cur);
-			CODE_UNREACHABLE;
 		}
 
+		/*
+		 * Returning lets z_fatal_error() abort the faulting thread.
+		 * k_thread_abort() on the current thread does not switch away
+		 * from exception context, so it cannot be used here.
+		 */
 		return;
 	}
 
